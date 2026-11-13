@@ -1,8 +1,4 @@
-export type TicketStatus =
-  | "WAITING"
-  | "PROCESSING"
-  | "COMPLETED"
-  | "SKIPPED";
+export type TicketStatus = "WAITING" | "PROCESSING" | "COMPLETED" | "SKIPPED";
 
 export interface Ticket {
   id: string;

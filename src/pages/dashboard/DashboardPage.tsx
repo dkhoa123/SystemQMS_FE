@@ -4,11 +4,15 @@ import StartOverView from "../../components/dashboard/topCard/StartOverView/Star
 import RightSidebar from "../../components/dashboard/RightSidebar/RightSidebar";
 import LineChartSection from "../../components/dashboard/second/LineChartSection";
 import BarChartSection from "../../components/dashboard/second/BarChartSection";
+import TicketListModal from "../../components/tickets/TicketListModal";
 import {
+  getServiceBarStatistics,
   getTicketIssuedStatistics,
   LineChartPoint,
+  ServiceBarPoint,
   TimeFilterMode,
 } from "../../api/apiBE/dashboards";
+import { Ticket, TicketFilter } from "../../types/ticket";
 
 const getInitialDateRange = () => {
   const today = new Date();
@@ -32,6 +36,15 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(false);
 
   const [filter, setFilter] = useState<TimeFilterMode>("Ngày");
+  const [filterService, setFilterService] = useState<TimeFilterMode>("Ngày");
+  const [serviceData, setServiceData] = useState<ServiceBarPoint[]>([]);
+  const [isServiceLoading, setIsServiceLoading] = useState(false);
+
+  const [fromDate, setFromDate] = useState("2026-11-09");
+
+  const [filters, setFilters] = useState<TicketFilter>({});
+  const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   // State ngày được nhận từ component con
   const [dateRange, setDateRange] = useState(getInitialDateRange);
@@ -61,32 +74,69 @@ export default function DashboardPage() {
     }
   };
 
+  const fetchServiceStatistics = async () => {
+    try {
+      setIsServiceLoading(true);
+
+      const result = await getServiceBarStatistics(filterService, fromDate);
+
+      setServiceData(result);
+    } catch (error) {
+      console.error("Lỗi lấy thống kê STT theo dịch vụ:", error);
+      setServiceData([]);
+    } finally {
+      setIsServiceLoading(false);
+    }
+  };
+
   // Khi người dùng thay đổi filter hoặc ngày
   useEffect(() => {
     if (!dateRange.fromDate || !dateRange.toDate) return;
 
     fetchStatistics(filter, dateRange.fromDate, dateRange.toDate);
   }, [filter, dateRange]);
+
+  // Khi người dùng thay đổi filterService hoặc fromDate
+  useEffect(() => {
+    if (!fromDate) return;
+
+    fetchServiceStatistics();
+  }, [filterService, fromDate]);
   return (
     <div className={styles.container}>
       {/* cọt trá*/}
       <div className={styles.leftCol}>
         <StartOverView />
-        {/* hàng ngang chứa 2 biểu đồ */}
-        <div className={styles.chartsRow}>
-          <div className={styles.lineCol}>
-            <LineChartSection
-              data={chartData}
-              isLoading={loading}
-              onFilterChange={setFilter}
-              onDateRangeChange={(fromDate, toDate) => {
-                setDateRange({ fromDate, toDate });
-              }}
-            />
+        <div className={styles.main}>
+          {/* hàng ngang chứa 2 biểu đồ */}
+          <div className={styles.chartsRow}>
+            <div className={styles.lineCol}>
+              <LineChartSection
+                data={chartData}
+                isLoading={loading}
+                onFilterChange={setFilter}
+                onDateRangeChange={(fromDate, toDate) => {
+                  setDateRange({ fromDate, toDate });
+                }}
+              />
+            </div>
+            <div className={styles.barCol}>
+              <BarChartSection
+                data={serviceData}
+                isLoading={isServiceLoading}
+                onFilterChange={(newFilter) => setFilterService(newFilter)}
+              />
+            </div>
           </div>
-          <div className={styles.barCol}>
-            <BarChartSection />
-          </div>
+        </div>
+
+        {/* table */}
+        <div className={styles.table}>
+          <TicketListModal
+            filters={filters}
+            refreshKey={refreshKey}
+            pageSize={5}
+          />
         </div>
       </div>
 

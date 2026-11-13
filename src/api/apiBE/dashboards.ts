@@ -38,3 +38,51 @@ export async function getTicketIssuedStatistics(
 
   return response.data;
 }
+
+export interface ServiceBarPoint {
+  serviceName: string;
+  count: number;
+}
+
+export async function getServiceBarStatistics(
+  filter: TimeFilterMode,
+  fromDate: string,
+): Promise<ServiceBarPoint[]> {
+  try {
+    const response = await axiosClient.get("/Dashboard/tickets/by-service", {
+      params: {
+        filter: filterMapping[filter],
+        fromDate,
+      },
+    });
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching service bar statistics:", error);
+    throw error;
+  }
+}
+
+export interface CountByStatus {
+  totalDevices: number;
+  totalServices: number;
+  totalTickets: number;
+  statusDeviceActive: number;
+  statusDeviceInactive: number;
+  statusServiceActive: number;
+  statusServiceInactive: number;
+  statusTicketIssued: number;
+  statusTicketUsed: number;
+  statusTicketSkipped: number;
+}
+
+export async function getCountByStatus(): Promise<CountByStatus> {
+  try {
+    const response = await axiosClient.get(
+      "/Dashboard/counters-services/summary",
+    );
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching count by status:", error);
+    throw error;
+  }
+}

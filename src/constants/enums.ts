@@ -1,5 +1,5 @@
 import { TicketStatus } from "../types/ticket";
-
+import { QueueStatus, HistoryResult } from "../types/counter";
 // ==================== TÀI KHOẢN ====================
 export const ACCOUNT_STATUS = {
   ACTIVE: "ACTIVE",
@@ -15,8 +15,16 @@ export const ACCOUNT_STATUS_LABEL: Record<AccountStatus, string> = {
 
 // ==================== THIẾT LẬP GIAO DIỆN ====================
 export const THEME_COLORS = [
-  "#4D8F8B", "#5B9A28", "#1E5B3A", "#2BB3A6", "#2E7DB8",
-  "#6F4BB8", "#FF7506", "#E5484D", "#D6336C", "#7A5C3E",
+  "#4D8F8B",
+  "#5B9A28",
+  "#1E5B3A",
+  "#2BB3A6",
+  "#2E7DB8",
+  "#6F4BB8",
+  "#FF7506",
+  "#E5484D",
+  "#D6336C",
+  "#7A5C3E",
 ] as const;
 
 export const VOICE_OPTIONS = [
@@ -91,4 +99,30 @@ export const CONNECTION_STATUS_LABEL: Record<ConnectionStatus, string> = {
 export const DEVICE_AVAILABILITY_LABEL: Record<DeviceAvailability, string> = {
   AVAILABLE: "Khả dụng",
   UNAVAILABLE: "Không khả dụng",
+};
+// ==================== MÀN LÀM VIỆC CỦA QUẦY ====================
+export const QUEUE_STATUS_LABEL: Record<QueueStatus, string> = {
+  WAITING_ACCEPT: "Chờ tiếp nhận",
+  WAITING_ASSIGN: "Chờ phân quầy",
+  ASSIGNED: "Đã chỉ định quầy",
+  ACCEPTED: "Đã tiếp nhận",
+};
+
+export const QUEUE_STATUS_COLOR: Record<QueueStatus, string> = {
+  WAITING_ACCEPT: "#faad14",
+  WAITING_ASSIGN: "#1677ff",
+  ASSIGNED: "#0e9aa7",
+  ACCEPTED: "#16a34a",
+};
+
+export const HISTORY_RESULT_LABEL: Record<HistoryResult, string> = {
+  DONE: "Hoàn Thành",
+  TRANSFERRED: "Chuyển Quầy",
+  ABSENT: "Vắng",
+};
+
+export const HISTORY_RESULT_COLOR: Record<HistoryResult, string> = {
+  DONE: "#16a34a",
+  TRANSFERRED: "#0e9aa7",
+  ABSENT: "#e5484d",
 };
