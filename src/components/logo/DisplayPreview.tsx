@@ -1,3 +1,4 @@
+import React, { useEffect, useState } from 'react';
 import type { CSSProperties } from 'react';
 import DOMPurify from 'dompurify';
 import styles from './DisplayPreview.module.css';
