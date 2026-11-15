@@ -55,6 +55,14 @@ export async function playAudioSequence(
     }
   }
 }
+export interface CounterMultiCallDisplayDto {
+  currentTime: string;
+  counterId: number;
+  counterName: string;
+  callingTickets: { sttId: string; ticketNumber: number | null }[];
+  waitingTickets: { sttId: string; ticketNumber: number | null }[];
+}
+
 
 export const counterService = {
   // Danh sách quầy để chọn trong form (đường dẫn API tạm, chờ backend)
@@ -91,6 +99,46 @@ export const counterService = {
     }
     const res = await axios.get("/counters", { params });
     return res.data;
+  },
+  // [NỐI BE] Lấy danh sách số đang gọi nhiều số trên màn hình quầy (DSP-04)
+  async getCounterMultiCall(
+    counterId: string,
+    waitingLimit = 9,
+  ): Promise<CounterMultiCallDisplayDto> {
+    const res = await axios.get<CounterMultiCallDisplayDto>(
+      `${BACKEND_URL}/api/v1/dsp/counters/${counterId}/multi-call`,
+      { params: { waitingLimit } },
+    );
+    return res.data;
+  },
+
+  // [NỐI BE] Phát âm thanh tùy chỉnh số lần lặp (repeatCount = 3 khi Bỏ qua theo OPR-05)
+  async playTicketsAudio(
+    counterId: string,
+    tickets: QueueTicket[],
+    repeatCount = 1,
+  ): Promise<void> {
+    for (const ticket of tickets) {
+      const sttId = ticket.number || ticket.id;
+      const audioRes = await axios.post<AudioCallEventDto>(
+        `${BACKEND_URL}/api/v1/dsp/counters/${counterId}/play-audio`,
+        null,
+        {
+          params: {
+            sttId,
+            repeatCount,
+          },
+        },
+      );
+
+      if (audioRes.data?.audioFiles?.length) {
+        await playAudioSequence(
+          audioRes.data.audioFiles,
+          audioRes.data.readingSpeed,
+          audioRes.data.repeatCount,
+        );
+      }
+    }
   },
 
   // Lấy thông tin tóm tắt của một quầy
