@@ -7,7 +7,7 @@ import ConfirmDialog from '../common/ConfirmDialog';
 import { counterService } from '../../api/services/counterService';
 import { ROUTES } from '../../constants/routes';
 import { HISTORY_RESULT_COLOR, HISTORY_RESULT_LABEL } from '../../constants/enums';
-import { CallingTicket, HandlingHistory } from '../../types/counter';
+import { CallingTicket, HandlingHistory, QueueTicket } from '../../types/counter';
 import styles from './CallPanel.module.css';
 
 const MAX_BATCH = 6; // SRS OPR-03: tối đa 6 số một lần
@@ -91,8 +91,37 @@ export default function CallPanel({ counterId, waiting, onChanged }: Props) {
         }
     };
 
-    const handleRecall = () => {
-        message.success(`Đang gọi lại số ${checkedTickets.map((t) => t.number).join(', ')}`);
+    // Gọi lại các số đang xử lý được check
+    const handleRecall = async () => {
+        if (noneChecked || busy) return;
+        setBusy(true);
+        try {
+            message.success(`Đang gọi lại số ${checkedTickets.map((t) => t.number).join(', ')}`);
+            await counterService.recallTickets(counterId, checkedTickets);
+        } catch {
+            message.error('Gọi lại thất bại, vui lòng thử lại');
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    // Gọi lại 1 số vắng từ Lịch sử xử lý
+    const handleRecallHistory = async (item: HandlingHistory) => {
+        if (busy) return;
+        setBusy(true);
+        try {
+            message.success(`Đang gọi lại số ${item.number}`);
+            const ticketPayload = {
+                id: item.id,
+                number: item.number,
+                serviceName: item.serviceName,
+            } as QueueTicket;
+            await counterService.recallTickets(counterId, [ticketPayload]);
+        } catch {
+            message.error('Gọi lại thất bại, vui lòng thử lại');
+        } finally {
+            setBusy(false);
+        }
     };
 
     const toggleOne = (id: string) =>
@@ -150,7 +179,7 @@ export default function CallPanel({ counterId, waiting, onChanged }: Props) {
 
             {/* Hàng nút điều khiển */}
             <div className={styles.actionRow}>
-                <Button className={styles.multiBtn} onClick={() => handleCall(batchSize)}>
+                <Button className={styles.multiBtn} disabled={busy} onClick={() => handleCall(batchSize)}>
                     Gọi nhiều số
                     <span className={styles.multiCount}>{batchSize}</span>
                     <Popover content={batchEditor} trigger="click" placement="bottom">
@@ -247,7 +276,12 @@ export default function CallPanel({ counterId, waiting, onChanged }: Props) {
                             Gọi Số
                         </Button>
                     )}
-                    <Button className={styles.callBtn} disabled={noneChecked} onClick={handleRecall}>
+                    <Button
+                        className={styles.callBtn}
+                        disabled={noneChecked}
+                        loading={busy}
+                        onClick={handleRecall}
+                    >
                         Gọi Lại
                     </Button>
                     <Button className={styles.callBtn} disabled={noneChecked} onClick={() => handleFinish('ABSENT')}>
@@ -278,7 +312,8 @@ export default function CallPanel({ counterId, waiting, onChanged }: Props) {
                                     size="small"
                                     className={styles.recallBtn}
                                     icon={<ReloadOutlined />}
-                                    onClick={() => message.success(`Đang gọi lại số ${h.number}`)}
+                                    disabled={busy}
+                                    onClick={() => handleRecallHistory(h)}
                                 >
                                     Gọi lại
                                 </Button>

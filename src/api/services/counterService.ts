@@ -204,7 +204,7 @@ export const counterService = {
     for (const ticket of tickets) {
       const sttId = ticket.number || ticket.id;
       const audioRes = await axios.post<AudioCallEventDto>(
-        `/api/v1/dsp/counters/${counterId}/play-audio`,
+        `${BACKEND_URL}/api/v1/dsp/counters/${counterId}/play-audio`,
         null,
         {
           params: {
