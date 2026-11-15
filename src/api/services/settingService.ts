@@ -1,22 +1,57 @@
 import axios from 'axios';
-import type { DisplaySetting, AudioSetting } from '../../types/setting';
+import type { DisplaySetting, AudioSetting, SpeechSpeed } from '../../types/setting';
 import { displaySettingMock, MOCK_AUDIO_SETTING } from '../../mock/settings.mock';
 
 const USE_MOCK = false; // Đã chuyển sang gọi API thật
 
-// Khai báo đúng Route từ backend Controller
-// Trong settingService.ts
-const DISPLAY_API_URL = 'https://localhost:7058/alta-api/api/configs/display';
-const AUDIO_API_URL = 'https://localhost:7058/api/v1/configs/audio';
+export const BACKEND_ORIGIN = 'https://localhost:7058';
+const DISPLAY_API_URL = `${BACKEND_ORIGIN}/alta-api/api/configs/display`;
+const AUDIO_API_URL = `${BACKEND_ORIGIN}/api/v1/configs/audio`;
+
+export interface AudioTemplateItem {
+    id: number;
+    name: string;
+    description: string;
+    templateText: string; // Chuỗi chứa token {soThuTu}, {quayTen} để hiển thị chip trên UI
+}
+
+export interface AudioConfigResponse {
+    templateId: number;
+    readingSpeed: SpeechSpeed;
+}
+
+export interface AudioConfigUpdatePayload {
+    templateId: number;
+    readingSpeed: SpeechSpeed;
+}
+
+export interface AudioPreviewPayload {
+    sampleTicketNumber: string;
+    sampleCounterName: string;
+    templateId: number;
+    readingSpeed: SpeechSpeed;
+}
+
+export interface AudioPreviewResponse {
+    playSequence: string[];
+    readingSpeed: number;
+}
+
+// Ánh xạ 3 mẫu hardcode ở BE sang chuỗi có token để UI render chip cam
+const TEMPLATE_TOKEN_MAP: Record<number, string> = {
+    1: 'Xin mời số thứ tự {soThuTu} đến quầy {quayTen}',
+    2: '{soThuTu} đến quầy {quayTen}',
+    3: 'Xin mời số thứ tự {soThuTu}',
+};
 
 export const settingService = {
+    // ================= DISPLAY CONFIG =================
     async getDisplaySetting(): Promise<DisplaySetting> {
         if (USE_MOCK) return { ...displaySettingMock };
-        
+
         const res = await axios.get(DISPLAY_API_URL);
         const data = res.data;
-        
-        // Map dữ liệu từ DisplayConfigResponseDto (Backend) sang DisplaySetting (Frontend)
+
         return {
             unitName: data.unitName,
             logoUrl: data.logoUrl,
@@ -26,10 +61,9 @@ export const settingService = {
         } as DisplaySetting;
     },
 
-    // Sửa lại hàm save để nhận thêm file và gửi đi dưới dạng FormData (do BE dùng [FromForm])
     async saveDisplaySetting(
-        body: DisplaySetting, 
-        backgroundFile?: File, 
+        body: DisplaySetting,
+        backgroundFile?: File,
         logoFile?: File
     ): Promise<DisplaySetting> {
         if (USE_MOCK) return { ...body };
@@ -42,37 +76,55 @@ export const settingService = {
         if (logoFile) formData.append('LogoFile', logoFile);
 
         const res = await axios.put(DISPLAY_API_URL, formData);
-        
         return res.data.data;
     },
 
     async resetDisplayField(fieldName: string): Promise<void> {
-        // Gọi API HttpDelete("{fieldName}") của backend
         await axios.delete(`${DISPLAY_API_URL}/${fieldName}`);
     },
 
+    // ================= AUDIO CONFIG =================
     async getAudioSetting(): Promise<AudioSetting> {
         if (USE_MOCK) return { ...MOCK_AUDIO_SETTING };
         const res = await axios.get(AUDIO_API_URL);
-        return res.data.data;
+        return res.data;
     },
 
-    async saveAudioSetting(body: AudioSetting): Promise<void> {
+    async getAudioConfig(): Promise<AudioConfigResponse> {
+        const res = await axios.get<AudioConfigResponse>(AUDIO_API_URL);
+        return res.data;
+    },
+
+    async getAudioTemplates(): Promise<AudioTemplateItem[]> {
+        const res = await axios.get<{ id: number; name: string; description: string }[]>(
+            `${AUDIO_API_URL}/AudioTemplates`
+        );
+        return res.data.map((item) => ({
+            ...item,
+            templateText: TEMPLATE_TOKEN_MAP[item.id] ?? TEMPLATE_TOKEN_MAP[1],
+        }));
+    },
+
+    async saveAudioSetting(body: AudioConfigUpdatePayload): Promise<void> {
         if (USE_MOCK) return;
         await axios.put(AUDIO_API_URL, body);
     },
-    async previewAudio(templateId: number, ticketNumber: string, counterName: string): Promise<string[]> {
-    if (USE_MOCK) {
-        return ['/AudioConfigs/welcome.wav', '/AudioConfigs/1-default.wav']; // Mock
-    }
-    
-    const res = await axios.post('/api/v1/configs/audio/preview', {
-        sampleTicketNumber: ticketNumber,
-        sampleCounterName: counterName,
-        templateId: templateId
-    });
-    
-    // Backend trả về mảng chuỗi đường dẫn (VD: ["/AudioConfigs/welcome.wav", ...])
-    return res.data.playSequence;
-    }
+
+    async previewAudio(payload: AudioPreviewPayload): Promise<AudioPreviewResponse> {
+        if (USE_MOCK) {
+            return {
+                playSequence: ['/AudioConfigs/welcome.wav', '/AudioConfigs/1-default.wav'],
+                readingSpeed: payload.readingSpeed,
+            };
+        }
+
+        const res = await axios.post<AudioPreviewResponse>(`${AUDIO_API_URL}/preview`, payload);
+        return res.data;
+    },
+
+    async updateAudioConfig(body: AudioConfigUpdatePayload): Promise<void> {
+        return this.saveAudioSetting(body);
+    },
 };
+
+export const audioApiService = settingService;
