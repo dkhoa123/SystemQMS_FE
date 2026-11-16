@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { DatePicker, Input, Select, Table } from "antd";
 import type { TableColumnsType } from "antd";
 
@@ -19,6 +19,7 @@ import type {
 } from "../../types/serviceHistory";
 
 import styles from "./ServiceHistoryTable.module.css";
+import { getServiceHistory } from "../../api/apiBE/services";
 
 const { RangePicker } = DatePicker;
 
@@ -48,36 +49,76 @@ export default function ServiceHistoryTable({
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
-  const filteredHistory = useMemo(() => {
-    return serviceHistoryMock.filter((item) => {
-      const matchesService = item.serviceId === serviceId;
+  // const filteredHistory = useMemo(() => {
+  //   return serviceHistoryMock.filter((item) => {
+  //     const matchesService = item.serviceId === serviceId;
 
-      const matchesSearch = item.ticketNumber
-        .toLowerCase()
-        .includes(searchText.trim().toLowerCase());
+  //     const matchesSearch = item.ticketNumber
+  //       .toLowerCase()
+  //       .includes(searchText.trim().toLowerCase());
 
-      const matchesStatus = !statusFilter || item.status === statusFilter;
+  //     const matchesStatus = !statusFilter || item.status === statusFilter;
 
-      const itemDate = item.usedAt.slice(0, 10);
+  //     const itemDate = item.usedAt.slice(0, 10);
 
-      const matchesFromDate = !fromDate || itemDate >= fromDate;
-      const matchesToDate = !toDate || itemDate <= toDate;
+  //     const matchesFromDate = !fromDate || itemDate >= fromDate;
+  //     const matchesToDate = !toDate || itemDate <= toDate;
 
-      return (
-        matchesService &&
-        matchesSearch &&
-        matchesStatus &&
-        matchesFromDate &&
-        matchesToDate
-      );
-    });
-  }, [serviceId, searchText, statusFilter, fromDate, toDate]);
+  //     return (
+  //       matchesService &&
+  //       matchesSearch &&
+  //       matchesStatus &&
+  //       matchesFromDate &&
+  //       matchesToDate
+  //     );
+  //   });
+  // }, [serviceId, searchText, statusFilter, fromDate, toDate]);
 
-  const paginatedHistory = useMemo(() => {
-    const start = (page - 1) * pageSize;
+  // const paginatedHistory = useMemo(() => {
+  //   const start = (page - 1) * pageSize;
 
-    return filteredHistory.slice(start, start + pageSize);
-  }, [filteredHistory, page, pageSize]);
+  //   return filteredHistory.slice(start, start + pageSize);
+  // }, [filteredHistory, page, pageSize]);
+
+  // 2. State lưu dữ liệu API trả về
+  const [historyData, setHistoryData] = useState<ServiceHistory[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(false);
+
+  // 3. Gọi API mỗi khi serviceId, bộ lọc hoặc trang thay đổi
+  useEffect(() => {
+    if (!serviceId) return;
+
+    const fetchHistory = async () => {
+      setLoading(true);
+      try {
+        const result = await getServiceHistory(serviceId, {
+          page,
+          pageSize,
+          keyword: searchText.trim() || undefined,
+          status: statusFilter,
+          fromDate,
+          toDate,
+        });
+
+        setHistoryData(result.items ?? []);
+        setTotal(result.total ?? 0);
+      } catch (error) {
+        console.error("Không thể tải lịch sử dịch vụ:", error);
+        setHistoryData([]);
+        setTotal(0);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    // Debounce 400ms để tránh gọi API liên tục khi user đang gõ tìm kiếm
+    const timer = setTimeout(() => {
+      fetchHistory();
+    }, 400);
+
+    return () => clearTimeout(timer);
+  }, [serviceId, page, pageSize, searchText, statusFilter, fromDate, toDate]);
 
   const columns: TableColumnsType<ServiceHistory> = [
     {
@@ -212,7 +253,8 @@ export default function ServiceHistoryTable({
         <Table<ServiceHistory>
           rowKey="id"
           columns={columns}
-          dataSource={paginatedHistory}
+          dataSource={historyData}
+          loading={loading}
           pagination={false}
           scroll={{ x: 800 }}
           locale={{ emptyText: "Chưa có lịch sử sử dụng dịch vụ" }}
@@ -223,7 +265,7 @@ export default function ServiceHistoryTable({
       <PaginationBar
         page={page}
         pageSize={pageSize}
-        total={filteredHistory.length}
+        total={total}
         onPageChange={setPage}
         onPageSizeChange={(size) => {
           setPageSize(size);

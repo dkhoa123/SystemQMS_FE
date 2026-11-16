@@ -9,6 +9,7 @@ import type { Service } from "../../types/service";
 import styles from "./ServiceDetailPage.module.css";
 
 import ServiceHistoryTable from "../../components/services/ServiceHistoryTable";
+import { getServiceById } from "../../api/apiBE/services";
 
 const SCHEDULE_DAYS = [
   { key: "monday", label: "Thứ 2" },
@@ -34,7 +35,7 @@ export default function ServiceDetailPage() {
       setLoading(true);
 
       try {
-        const result = await serviceService.getById(serviceId ?? "");
+        const result = await getServiceById(serviceId ?? "");
 
         if (active) {
           setService(result);
@@ -123,7 +124,7 @@ export default function ServiceDetailPage() {
           <div className={styles.infoRow}>
             <span className={styles.infoLabel}>Thời gian:</span>
 
-            <div className={styles.scheduleList}>
+            <div className={styles.sheduleList}>
               {activeSchedule.length > 0 ? (
                 activeSchedule.map((day) => (
                   <div key={day.key} className={styles.scheduleItem}>

@@ -34,6 +34,7 @@ import {
 } from "../../constants/routes";
 
 import DeleteServiceModal from "../../components/services/DeleteServiceModal";
+import { getAllServices } from "../../api/apiBE/services";
 
 const { RangePicker } = DatePicker;
 
@@ -75,7 +76,7 @@ export default function ServiceListPage() {
       setLoading(true);
 
       try {
-        const response = await serviceService.getList({
+        const response = await getAllServices({
           page,
           pageSize,
           keyword: searchText,
@@ -88,7 +89,9 @@ export default function ServiceListPage() {
           setServices(response.items);
           setTotal(response.total);
         }
-      } catch {
+      } catch (error) {
+        console.error(error);
+
         if (active) {
           message.error("Không thể tải danh sách dịch vụ");
         }

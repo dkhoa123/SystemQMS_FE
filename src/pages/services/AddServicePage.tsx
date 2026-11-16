@@ -15,9 +15,10 @@ import dayjs from "dayjs";
 
 import { serviceService } from "../../api/services/serviceService";
 
-import type { ServiceSchedule } from "../../types/service";
+import type { Service, ServiceSchedule } from "../../types/service";
 
 import customParseFormat from "dayjs/plugin/customParseFormat";
+import { getServiceById, updateService } from "../../api/apiBE/services";
 
 dayjs.extend(customParseFormat);
 
@@ -76,6 +77,8 @@ export default function AddServicePage() {
   const [imageFiles, setImageFiles] = useState<UploadFile[]>([]);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
+  const [initialService, setInitialService] = useState<Service | null>(null);
+
   const handleFinish = async (values: AddServiceFormValues) => {
     try {
       // ===== CHUẨN HÓA LỊCH XỬ LÝ =====
@@ -110,21 +113,29 @@ export default function AddServicePage() {
 
       // ===== DỮ LIỆU BIỂU MẪU =====
       const serviceValues = {
-        serviceCode: values.serviceCode,
-        serviceName: values.serviceName,
-        description: values.description,
-        assignmentMethod: values.assignmentMethod,
-        status: values.status,
+        serviceCode:
+          values.serviceCode?.trim() || initialService?.serviceCode || "",
+
+        serviceName:
+          values.serviceName?.trim() || initialService?.serviceName || "",
+
+        description:
+          values.description?.trim() || initialService?.description || "",
+
+        assignmentMethod:
+          values.assignmentMethod ||
+          initialService?.assignmentMethod ||
+          "ASSIGN_ON_ISSUE",
+
+        status:
+          values.status || initialService?.status || SERVICE_STATUS.ACTIVE,
+
         schedule,
-        imageUrl,
       };
 
       // ===== CHẾ ĐỘ CẬP NHẬT =====
       if (isEditMode && serviceId) {
-        const updatedService = await serviceService.update(
-          serviceId,
-          serviceValues,
-        );
+        const updatedService = await updateService(serviceId, serviceValues);
 
         message.success(
           `Đã cập nhật dịch vụ ${updatedService.serviceCode} thành công`,
@@ -164,9 +175,22 @@ export default function AddServicePage() {
       setLoadingService(true);
 
       try {
-        const service = await serviceService.getById(serviceId);
-
+        const service = await getServiceById(serviceId);
+        // console.log("Loaded service:", service);
+        // console.log("Service ID from params:", serviceId);
         if (!active) return;
+
+        // 1. Lưu lại bản gốc để dự phòng lúc submit
+        setInitialService(service);
+
+        // 2. Điền dữ liệu vào Form (nhớ map dự phòng tên trường từ BE)
+        form.setFieldsValue({
+          serviceCode: service.serviceCode || service.serviceId || "",
+          serviceName: service.serviceName || "",
+          description: service.description ?? "",
+          assignmentMethod: service.assignmentMethod || "ASSIGN_ON_ISSUE",
+          status: service.status || SERVICE_STATUS.ACTIVE,
+        });
 
         if (!service) {
           message.error("Không tìm thấy dịch vụ");

@@ -27,3 +27,10 @@ export interface ServiceHistory {
   usedAt: string;
   counterName: string;
 }
+
+export interface PageResultServiceHistory {
+  items: ServiceHistory[];
+  page: number;
+  pageSize: number;
+  total: number;
+}
