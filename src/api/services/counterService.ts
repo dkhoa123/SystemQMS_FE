@@ -9,17 +9,60 @@ import type {
   QueueListParams,
   QueueStats,
   HandlingHistory,
-} from "../../types/counter"; // Điều chỉnh lại đường dẫn type cho khớp với dự án của bạn
+} from "../../types/counter";
 import type { PageResult } from "../../types/common";
-import { MOCK_COUNTERS } from "../../mock/counters.mock"; // Điều chỉnh lại đường dẫn mock cho khớp nếu cần
+import { MOCK_COUNTERS } from "../../mock/counters.mock";
 import {
   MOCK_QUEUE,
   MOCK_QUEUE_STATS,
   MOCK_HISTORY,
-} from "../../mock/counterQueue.mock"; // Đường dẫn chứa các biến mock hàng đợi
+} from "../../mock/counterQueue.mock";
 
-const USE_MOCK = true; // đổi false khi backend sẵn sàng
+const USE_MOCK = true; // Giữ nguyên mock cho các chức năng chưa nối BE
+const BACKEND_URL = "https://localhost:7058";
 const delay = (ms = 300) => new Promise((r) => setTimeout(r, ms));
+
+
+export interface AudioCallEventDto {
+  counterId: number;
+  counterName: string;
+  ticketNumber: string;
+  audioFiles: string[];
+  readingSpeed: number;
+  repeatCount: number;
+}
+
+// Hàm hỗ trợ phát tuần tự danh sách file .wav từ BE (nếu phát trực tiếp tại trình duyệt)
+export async function playAudioSequence(
+  audioFiles: string[],
+  readingSpeed = 1.0,
+  repeatCount = 1,
+): Promise<void> {
+  if (!audioFiles || audioFiles.length === 0) return;
+
+  for (let r = 0; r < repeatCount; r++) {
+    for (const path of audioFiles) {
+      // Nối thêm domain BE nếu path là đường dẫn tương đối (/AudioConfigs/...)
+      const fullUrl = path.startsWith("http") ? path : `${BACKEND_URL}${path}`;
+
+      await new Promise<void>((resolve) => {
+        const audio = new Audio(fullUrl);
+        audio.playbackRate = readingSpeed;
+        audio.onended = () => resolve();
+        audio.onerror = () => resolve();
+        audio.play().catch(() => resolve());
+      });
+    }
+  }
+}
+export interface CounterMultiCallDisplayDto {
+  currentTime: string;
+  counterId: number;
+  counterName: string;
+  callingTickets: { sttId: string; ticketNumber: number | null }[];
+  waitingTickets: { sttId: string; ticketNumber: number | null }[];
+}
+
 
 export const counterService = {
   // Danh sách quầy để chọn trong form (đường dẫn API tạm, chờ backend)
@@ -54,8 +97,48 @@ export const counterService = {
         total: filtered.length,
       };
     }
-    const res = await axios.get("/counters", { params }); // Hoặc axiosClient tùy theo cách cấu hình dự án của bạn
+    const res = await axios.get("/counters", { params });
     return res.data;
+  },
+  // [NỐI BE] Lấy danh sách số đang gọi nhiều số trên màn hình quầy (DSP-04)
+  async getCounterMultiCall(
+    counterId: string,
+    waitingLimit = 9,
+  ): Promise<CounterMultiCallDisplayDto> {
+    const res = await axios.get<CounterMultiCallDisplayDto>(
+      `${BACKEND_URL}/api/v1/dsp/counters/${counterId}/multi-call`,
+      { params: { waitingLimit } },
+    );
+    return res.data;
+  },
+
+  // [NỐI BE] Phát âm thanh tùy chỉnh số lần lặp (repeatCount = 3 khi Bỏ qua theo OPR-05)
+  async playTicketsAudio(
+    counterId: string,
+    tickets: QueueTicket[],
+    repeatCount = 1,
+  ): Promise<void> {
+    for (const ticket of tickets) {
+      const sttId = ticket.number || ticket.id;
+      const audioRes = await axios.post<AudioCallEventDto>(
+        `${BACKEND_URL}/api/v1/dsp/counters/${counterId}/play-audio`,
+        null,
+        {
+          params: {
+            sttId,
+            repeatCount,
+          },
+        },
+      );
+
+      if (audioRes.data?.audioFiles?.length) {
+        await playAudioSequence(
+          audioRes.data.audioFiles,
+          audioRes.data.readingSpeed,
+          audioRes.data.repeatCount,
+        );
+      }
+    }
   },
 
   // Lấy thông tin tóm tắt của một quầy
@@ -64,7 +147,7 @@ export const counterService = {
       await delay();
       return MOCK_COUNTERS.find((c) => c.id === counterId);
     }
-    const res = await axios.get(`/counters/${counterId}`); // đường dẫn tạm
+    const res = await axios.get(`/counters/${counterId}`);
     return res.data;
   },
 
@@ -117,19 +200,79 @@ export const counterService = {
     return res.data;
   },
 
-  // Gọi số kế tiếp. Nếu đang có số hiện tại thì số đó được ghi là "Hoàn thành"
-  // Gọi tối đa `count` số kế tiếp
+  // [NỐI BE] Gọi số kế tiếp & kích hoạt phát âm thanh DSP theo cấu hình mẫu câu + tốc độ đọc
   async callBatch(counterId: string, count: number): Promise<QueueTicket[]> {
+    const safeCount = Math.min(Math.max(1, count), 6); // Giới hạn tối đa 6 số/lần theo SRS (OPR-03)
+
+    // Lấy dữ liệu số kế tiếp
+    let calledTickets: QueueTicket[] = [];
     if (USE_MOCK) {
       await delay(200);
-      MOCK_QUEUE_STATS.waiting = Math.max(0, MOCK_QUEUE_STATS.waiting - count);
-      return takeMockTickets(count);
+      MOCK_QUEUE_STATS.waiting = Math.max(0, MOCK_QUEUE_STATS.waiting - safeCount);
+      calledTickets = takeMockTickets(safeCount);
+    } else {
+      const res = await axios.post(`/counters/${counterId}/call`, {
+        count: safeCount,
+      });
+      calledTickets = res.data;
     }
-    const res = await axios.post(`/counters/${counterId}/call`, { count });
-    return res.data;
+
+    // Kích hoạt BE build chuỗi file .wav theo cấu hình Audio (CFG-04, CFG-05) và bắn SignalR OnCallNumberAudio
+    for (const ticket of calledTickets) {
+      const sttId = ticket.number || ticket.id;
+      const audioRes = await axios.post<AudioCallEventDto>(
+        `${BACKEND_URL}/api/v1/dsp/counters/${counterId}/play-audio`,
+        null,
+        {
+          params: {
+            sttId,
+            repeatCount: 1,
+          },
+        },
+      );
+
+      // Phát trực tiếp trên client nếu máy quầy kiêm loa (hoặc màn hình sảnh sẽ tự nghe qua SignalR)
+      if (audioRes.data?.audioFiles?.length) {
+        await playAudioSequence(
+          audioRes.data.audioFiles,
+          audioRes.data.readingSpeed,
+          audioRes.data.repeatCount,
+        );
+      }
+    }
+
+    return calledTickets;
   },
 
-  // Hoàn thành hoặc bỏ qua (vắng) các số được chọn
+  // [NỐI BE] Gọi lại các số đang xử lý hoặc số văng (OPR-06, DSP-07)
+  async recallTickets(
+    counterId: string,
+    tickets: QueueTicket[],
+  ): Promise<void> {
+    for (const ticket of tickets) {
+      const sttId = ticket.number || ticket.id;
+      const audioRes = await axios.post<AudioCallEventDto>(
+        `${BACKEND_URL}/api/v1/dsp/counters/${counterId}/play-audio`,
+        null,
+        {
+          params: {
+            sttId,
+            repeatCount: 1,
+          },
+        },
+      );
+
+      if (audioRes.data?.audioFiles?.length) {
+        await playAudioSequence(
+          audioRes.data.audioFiles,
+          audioRes.data.readingSpeed,
+          audioRes.data.repeatCount,
+        );
+      }
+    }
+  },
+
+  // Hoàn thành hoặc bỏ qua (vắng) các số được chọn (giữ nguyên)
   async finishTickets(
     counterId: string,
     tickets: QueueTicket[],
@@ -150,7 +293,7 @@ export const counterService = {
       else MOCK_QUEUE_STATS.skipped += tickets.length;
       return;
     }
-    await axios.post(`/counters/${counterId}/finish`, {
+    await axios.post(`${BACKEND_URL}/counters/${counterId}/finish`, {
       ticketIds: tickets.map((t) => t.id),
       result,
     });

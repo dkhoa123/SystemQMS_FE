@@ -110,16 +110,11 @@ export default function DisplaySettingPage() {
         setSubmitting(true);
         try {
             // Tải ảnh mới lên lần lượt, rồi mới lưu thiết lập
-            const newBackground = files.background
-                ? await settingService.uploadImage(files.background)
-                : values.backgroundUrl;
-            const newLogo = files.logo ? await settingService.uploadImage(files.logo) : values.logoUrl;
-
-            const result = await settingService.saveDisplaySetting({
-                ...values,
-                backgroundUrl: newBackground,
-                logoUrl: newLogo,
-            });
+            const result = await settingService.saveDisplaySetting(
+            values,             // 1. Cấu hình text hiện tại
+            files.background,   // 2. File ảnh nền (nếu có chọn file mới)
+            files.logo          // 3. File logo (nếu có chọn file mới)
+        );
             setSaved(result);
             setFiles({});
             form.setFieldsValue(result);

@@ -1,58 +1,130 @@
 import axios from 'axios';
-import type { DisplaySetting } from '../../types/setting';
-import { displaySettingMock } from '../../mock/settings.mock';
-import type { AudioSetting } from '../../types/setting';
-import { MOCK_AUDIO_SETTING } from '../../mock/settings.mock';
+import type { DisplaySetting, AudioSetting, SpeechSpeed } from '../../types/setting';
+import { displaySettingMock, MOCK_AUDIO_SETTING } from '../../mock/settings.mock';
 
-const USE_MOCK = true; // đổi false khi backend sẵn sàng
-const delay = <T>(data: T, ms = 300) =>
-    new Promise<T>((resolve) => setTimeout(() => resolve(data), ms));
+const USE_MOCK = false; // Đã chuyển sang gọi API thật
 
-let displayDb: DisplaySetting = { ...displaySettingMock };
+export const BACKEND_ORIGIN = 'https://localhost:7058';
+const DISPLAY_API_URL = `${BACKEND_ORIGIN}/alta-api/api/configs/display`;
+const AUDIO_API_URL = `${BACKEND_ORIGIN}/api/v1/configs/audio`;
+
+export interface AudioTemplateItem {
+    id: number;
+    name: string;
+    description: string;
+    templateText: string; // Chuỗi chứa token {soThuTu}, {quayTen} để hiển thị chip trên UI
+}
+
+export interface AudioConfigResponse {
+    templateId: number;
+    readingSpeed: SpeechSpeed;
+}
+
+export interface AudioConfigUpdatePayload {
+    templateId: number;
+    readingSpeed: SpeechSpeed;
+}
+
+export interface AudioPreviewPayload {
+    sampleTicketNumber: string;
+    sampleCounterName: string;
+    templateId: number;
+    readingSpeed: SpeechSpeed;
+}
+
+export interface AudioPreviewResponse {
+    playSequence: string[];
+    readingSpeed: number;
+}
+
+// Ánh xạ 3 mẫu hardcode ở BE sang chuỗi có token để UI render chip cam
+const TEMPLATE_TOKEN_MAP: Record<number, string> = {
+    1: 'Xin mời số thứ tự {soThuTu} đến quầy {quayTen}',
+    2: '{soThuTu} đến quầy {quayTen}',
+    3: 'Xin mời số thứ tự {soThuTu}',
+};
 
 export const settingService = {
+    // ================= DISPLAY CONFIG =================
     async getDisplaySetting(): Promise<DisplaySetting> {
-        if (!USE_MOCK) {
-            const res = await axios.get('/api/v1/settings/display');
-            return res.data.data;
-        }
-        return delay({ ...displayDb });
+        if (USE_MOCK) return { ...displaySettingMock };
+
+        const res = await axios.get(DISPLAY_API_URL);
+        const data = res.data;
+
+        return {
+            unitName: data.unitName,
+            logoUrl: data.logoUrl,
+            backgroundUrl: data.backgroundImageUrl,
+            bannerText: data.bannerText,
+            themeColor: data.toneColorHex,
+        } as DisplaySetting;
     },
 
-    async saveDisplaySetting(body: DisplaySetting): Promise<DisplaySetting> {
-        if (!USE_MOCK) {
-            const res = await axios.put('/api/v1/settings/display', body);
-            return res.data.data;
-        }
-        displayDb = { ...body };
-        return delay({ ...displayDb });
-    },
+    async saveDisplaySetting(
+        body: DisplaySetting,
+        backgroundFile?: File,
+        logoFile?: File
+    ): Promise<DisplaySetting> {
+        if (USE_MOCK) return { ...body };
 
-    // Tải ảnh lên, trả về đường dẫn ảnh (đường dẫn API tạm, chờ backend)
-    async uploadImage(file: File): Promise<string> {
-        if (!USE_MOCK) {
-            const formData = new FormData();
-            formData.append('file', file);
-            const res = await axios.post('/api/v1/files', formData);
-            return res.data.data.url;
-        }
-        return delay(URL.createObjectURL(file));
-    },
-    async getAudioSetting(): Promise<AudioSetting> {
-        if (USE_MOCK) {
-            await new Promise((r) => setTimeout(r, 300));
-            return { ...MOCK_AUDIO_SETTING };
-        }
-        const res = await axios.get('/api/v1/settings/audio'); // đường dẫn tạm, chờ BE
+        const formData = new FormData();
+        if (body.unitName !== undefined) formData.append('UnitName', body.unitName);
+        if (body.bannerText) formData.append('BannerText', body.bannerText);
+        if (body.themeColor) formData.append('ToneColorHex', body.themeColor);
+        if (backgroundFile) formData.append('BackgroundFile', backgroundFile);
+        if (logoFile) formData.append('LogoFile', logoFile);
+
+        const res = await axios.put(DISPLAY_API_URL, formData);
         return res.data.data;
     },
 
-    async saveAudioSetting(body: AudioSetting): Promise<void> {
+    async resetDisplayField(fieldName: string): Promise<void> {
+        await axios.delete(`${DISPLAY_API_URL}/${fieldName}`);
+    },
+
+    // ================= AUDIO CONFIG =================
+    async getAudioSetting(): Promise<AudioSetting> {
+        if (USE_MOCK) return { ...MOCK_AUDIO_SETTING };
+        const res = await axios.get(AUDIO_API_URL);
+        return res.data;
+    },
+
+    async getAudioConfig(): Promise<AudioConfigResponse> {
+        const res = await axios.get<AudioConfigResponse>(AUDIO_API_URL);
+        return res.data;
+    },
+
+    async getAudioTemplates(): Promise<AudioTemplateItem[]> {
+        const res = await axios.get<{ id: number; name: string; description: string }[]>(
+            `${AUDIO_API_URL}/AudioTemplates`
+        );
+        return res.data.map((item) => ({
+            ...item,
+            templateText: TEMPLATE_TOKEN_MAP[item.id] ?? TEMPLATE_TOKEN_MAP[1],
+        }));
+    },
+
+    async saveAudioSetting(body: AudioConfigUpdatePayload): Promise<void> {
+        if (USE_MOCK) return;
+        await axios.put(AUDIO_API_URL, body);
+    },
+
+    async previewAudio(payload: AudioPreviewPayload): Promise<AudioPreviewResponse> {
         if (USE_MOCK) {
-            await new Promise((r) => setTimeout(r, 400));
-            Object.assign(MOCK_AUDIO_SETTING, body);
-            return;
+            return {
+                playSequence: ['/AudioConfigs/welcome.wav', '/AudioConfigs/1-default.wav'],
+                readingSpeed: payload.readingSpeed,
+            };
         }
-        await axios.put('/api/v1/settings/audio', body);
+
+        const res = await axios.post<AudioPreviewResponse>(`${AUDIO_API_URL}/preview`, payload);
+        return res.data;
+    },
+
+    async updateAudioConfig(body: AudioConfigUpdatePayload): Promise<void> {
+        return this.saveAudioSetting(body);
     },
 };
+
+export const audioApiService = settingService;

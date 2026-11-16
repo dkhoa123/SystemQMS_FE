@@ -7,7 +7,7 @@ import ConfirmDialog from '../common/ConfirmDialog';
 import { counterService } from '../../api/services/counterService';
 import { ROUTES } from '../../constants/routes';
 import { HISTORY_RESULT_COLOR, HISTORY_RESULT_LABEL } from '../../constants/enums';
-import { CallingTicket, HandlingHistory } from '../../types/counter';
+import { CallingTicket, HandlingHistory, QueueTicket } from '../../types/counter';
 import styles from './CallPanel.module.css';
 
 const MAX_BATCH = 6; // SRS OPR-03: tối đa 6 số một lần
@@ -49,20 +49,38 @@ export default function CallPanel({ counterId, waiting, onChanged }: Props) {
         counterService.getHistory(counterId).then(setHistory);
     }, [counterId]);
 
-    // Gọi số: lấy tối đa batchSize số, tự check tất cả
+    // Gọi 1 số hoặc gọi nhiều số (tối đa MAX_BATCH = 6)
     const handleCall = async (count: number) => {
-        if (hasProcessing) {
-            message.info('Vui lòng xử lý xong các số đang gọi');
+        if (busy) return;
+
+        // Giới hạn tổng số đang xử lý đồng thời không vượt quá MAX_BATCH (6 số) theo SRS OPR-03
+        const availableSlots = MAX_BATCH - processing.length;
+        if (availableSlots <= 0) {
+            message.warning(`Đã đạt tối đa ${MAX_BATCH} số đang xử lý cùng lúc`);
             return;
         }
+
+        const requestCount = Math.min(Math.max(1, count), availableSlots);
         setBusy(true);
         try {
-            const picked = await counterService.callBatch(counterId, count);
-            if (picked.length === 0) message.info('Hiện không còn số đang chờ');
-            const next: CallingTicket[] = picked.map((t) => ({ ...t, callState: 'PROCESSING' }));
-            setCalling(next); // bỏ các số đã xử lý ở lượt trước
-            setMode(count === 1 ? 'single' : 'multi');
-            setChecked(next.map((t) => t.id));
+            const picked = await counterService.callBatch(counterId, requestCount);
+            if (picked.length === 0) {
+                message.info('Hiện không còn số đang chờ');
+                return;
+            }
+
+            const newTickets: CallingTicket[] = picked.map((t) => ({
+                ...t,
+                callState: 'PROCESSING',
+            }));
+
+            // Giữ lại các số chưa xử lý ở lượt trước (các vé đã uncheck) + gộp vé mới gọi
+            const mergedProcessing = [...processing, ...newTickets];
+            setCalling(mergedProcessing);
+            setMode(mergedProcessing.length === 1 && count === 1 ? 'single' : 'multi');
+
+            // SRS OPR-03: Danh sách số đang gọi auto check tất cả
+            setChecked(mergedProcessing.map((t) => t.id));
             onChanged();
         } catch {
             message.error('Gọi số thất bại, vui lòng thử lại');
@@ -71,12 +89,18 @@ export default function CallPanel({ counterId, waiting, onChanged }: Props) {
         }
     };
 
-    // Hoàn thành / Bỏ qua: chỉ áp dụng cho các số được check
+    // Hoàn thành / Bỏ qua: chỉ áp dụng cho các số được check (số uncheck giữ lại trên màn hình)
     const handleFinish = async (result: 'DONE' | 'ABSENT') => {
-        if (noneChecked) return;
+        if (noneChecked || busy) return;
         setBusy(true);
         try {
             await counterService.finishTickets(counterId, checkedTickets, result);
+
+            // SRS OPR-05: Bỏ qua -> loa đọc 3 lần cho các số được check
+            if (result === 'ABSENT') {
+                await counterService.playTicketsAudio(counterId, checkedTickets, 3);
+            }
+
             const ids = checkedTickets.map((t) => t.id);
             setCalling((list) =>
                 list.map((c) => (ids.includes(c.id) ? { ...c, callState: result } : c)),
@@ -91,8 +115,37 @@ export default function CallPanel({ counterId, waiting, onChanged }: Props) {
         }
     };
 
-    const handleRecall = () => {
-        message.success(`Đang gọi lại số ${checkedTickets.map((t) => t.number).join(', ')}`);
+    // Gọi lại các số đang xử lý được check (OPR-03, OPR-06)
+    const handleRecall = async () => {
+        if (noneChecked || busy) return;
+        setBusy(true);
+        try {
+            message.success(`Đang gọi lại số ${checkedTickets.map((t) => t.number).join(', ')}`);
+            await counterService.recallTickets(counterId, checkedTickets);
+        } catch {
+            message.error('Gọi lại thất bại, vui lòng thử lại');
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    // Gọi lại 1 số vắng từ Lịch sử xử lý
+    const handleRecallHistory = async (item: HandlingHistory) => {
+        if (busy) return;
+        setBusy(true);
+        try {
+            message.success(`Đang gọi lại số ${item.number}`);
+            const ticketPayload = {
+                id: item.id,
+                number: item.number,
+                serviceName: item.serviceName,
+            } as QueueTicket;
+            await counterService.recallTickets(counterId, [ticketPayload]);
+        } catch {
+            message.error('Gọi lại thất bại, vui lòng thử lại');
+        } finally {
+            setBusy(false);
+        }
     };
 
     const toggleOne = (id: string) =>
@@ -150,7 +203,12 @@ export default function CallPanel({ counterId, waiting, onChanged }: Props) {
 
             {/* Hàng nút điều khiển */}
             <div className={styles.actionRow}>
-                <Button className={styles.multiBtn} onClick={() => handleCall(batchSize)}>
+                <Button
+                    className={styles.multiBtn}
+                    loading={busy}
+                    disabled={processing.length >= MAX_BATCH}
+                    onClick={() => handleCall(batchSize)}
+                >
                     Gọi nhiều số
                     <span className={styles.multiCount}>{batchSize}</span>
                     <Popover content={batchEditor} trigger="click" placement="bottom">
@@ -169,7 +227,7 @@ export default function CallPanel({ counterId, waiting, onChanged }: Props) {
             <div className={styles.callBox}>
                 <div className={styles.callHead}>
                     <span className={styles.callTitle}>
-                        {calling.length > 0 && mode === 'multi' ? 'Đang xử lý' : ''}
+                        {calling.length > 0 && mode === 'multi' ? `Đang xử lý (${processing.length}/${MAX_BATCH})` : ''}
                     </span>
                     {hasProcessing && mode === 'multi' && (
                         <Checkbox checked={allChecked} onChange={toggleAll}>
@@ -247,10 +305,20 @@ export default function CallPanel({ counterId, waiting, onChanged }: Props) {
                             Gọi Số
                         </Button>
                     )}
-                    <Button className={styles.callBtn} disabled={noneChecked} onClick={handleRecall}>
+                    <Button
+                        className={styles.callBtn}
+                        disabled={noneChecked}
+                        loading={busy}
+                        onClick={handleRecall}
+                    >
                         Gọi Lại
                     </Button>
-                    <Button className={styles.callBtn} disabled={noneChecked} onClick={() => handleFinish('ABSENT')}>
+                    <Button
+                        className={styles.callBtn}
+                        disabled={noneChecked}
+                        loading={busy}
+                        onClick={() => handleFinish('ABSENT')}
+                    >
                         Bỏ Qua
                     </Button>
                     <Button className={styles.callBtn} disabled={noneChecked} onClick={notReady}>
@@ -278,7 +346,8 @@ export default function CallPanel({ counterId, waiting, onChanged }: Props) {
                                     size="small"
                                     className={styles.recallBtn}
                                     icon={<ReloadOutlined />}
-                                    onClick={() => message.success(`Đang gọi lại số ${h.number}`)}
+                                    disabled={busy}
+                                    onClick={() => handleRecallHistory(h)}
                                 >
                                     Gọi lại
                                 </Button>
