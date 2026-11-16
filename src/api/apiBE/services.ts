@@ -150,3 +150,38 @@ export async function updateService(
     throw error;
   }
 }
+
+export async function createService(
+  value: ServiceCreateValues,
+): Promise<Service> {
+  try {
+    console.log("📤 Payload gửi lên:", value);
+
+    const response = await axiosClient.post(`/Services/create`, value);
+
+    const raw = response.data.data ?? response.data;
+
+    console.log("📥 Response từ BE:", raw);
+
+    return mapService(raw);
+  } catch (error: any) {
+    console.error("Create service error:", error);
+    console.error("Response:", error.response?.data);
+    console.error("Request:", error.config?.data);
+
+    throw error;
+  }
+}
+
+export async function deleteService(serviceIds: string[]): Promise<void> {
+  try {
+    console.log("📤 Payload gửi lên:", serviceIds);
+
+    await axiosClient.delete("/Services/delete", {
+      data: { serviceIds },
+    });
+  } catch (error) {
+    console.error("Delete service error:", error);
+    throw error;
+  }
+}

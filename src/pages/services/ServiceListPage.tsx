@@ -34,7 +34,7 @@ import {
 } from "../../constants/routes";
 
 import DeleteServiceModal from "../../components/services/DeleteServiceModal";
-import { getAllServices } from "../../api/apiBE/services";
+import { getAllServices, deleteService } from "../../api/apiBE/services";
 
 const { RangePicker } = DatePicker;
 
@@ -118,31 +118,37 @@ export default function ServiceListPage() {
     setDeleting(true);
 
     try {
-      const deletedCount = await serviceService.deleteMany(
-        selectedRowKeys.map(String),
-      );
+      // Lấy danh sách ID dịch vụ được chọn
+      const serviceIds = selectedRowKeys.map(String);
 
-      message.success(`Đã xóa ${deletedCount} dịch vụ thành công`);
+      console.log("📤 Danh sách ID dịch vụ cần xóa:", serviceIds);
 
-      // Bỏ lựa chọn sau khi xóa
+      // Gọi API DELETE
+      await deleteService(serviceIds);
+
+      message.success(`Đã xóa ${serviceIds.length} dịch vụ thành công`);
+
+      // Bỏ chọn các dòng
       setSelectedRowKeys([]);
 
-      // Đóng popup
+      // Đóng modal
       setDeleteModalOpen(false);
 
-      // Điều chỉnh trang nếu trang hiện tại không còn dữ liệu
-      const remainingTotal = Math.max(0, total - deletedCount);
+      // Tính lại số trang
+      const remainingTotal = Math.max(0, total - serviceIds.length);
       const lastPage = Math.max(1, Math.ceil(remainingTotal / pageSize));
 
       setPage((currentPage) => Math.min(currentPage, lastPage));
 
-      // Tải lại danh sách
+      // Load lại danh sách
       setRefreshKey((current) => current + 1);
-    } catch (error) {
+    } catch (error: any) {
+      console.error("Lỗi xóa dịch vụ:", error);
+
       message.error(
-        error instanceof Error
-          ? error.message
-          : "Không thể xóa dịch vụ. Vui lòng thử lại.",
+        error.response?.data?.message ||
+          error.message ||
+          "Không thể xóa dịch vụ. Vui lòng thử lại.",
       );
     } finally {
       setDeleting(false);

@@ -18,7 +18,11 @@ import { serviceService } from "../../api/services/serviceService";
 import type { Service, ServiceSchedule } from "../../types/service";
 
 import customParseFormat from "dayjs/plugin/customParseFormat";
-import { getServiceById, updateService } from "../../api/apiBE/services";
+import {
+  createService,
+  getServiceById,
+  updateService,
+} from "../../api/apiBE/services";
 
 dayjs.extend(customParseFormat);
 
@@ -147,7 +151,7 @@ export default function AddServicePage() {
       }
 
       // ===== CHẾ ĐỘ THÊM MỚI =====
-      const createdService = await serviceService.create(serviceValues);
+      const createdService = await createService(serviceValues);
 
       message.success(
         `Đã thêm dịch vụ ${createdService.serviceCode} thành công`,
