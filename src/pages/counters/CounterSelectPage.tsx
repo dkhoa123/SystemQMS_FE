@@ -9,6 +9,7 @@ import { counterService } from "../../api/services/counterService";
 import { MOCK_SERVICE_NAMES } from "../../mock/counters.mock";
 import { buildCounterWorkPath } from "../../constants/routes";
 import { CounterSummary, CounterUseFilter } from "../../types/counter";
+import { getCounters } from "../../api/apiBE/counters";
 
 export default function CounterSelectPage() {
   const navigate = useNavigate();
@@ -38,23 +39,38 @@ export default function CounterSelectPage() {
 
   // Gọi API mỗi khi bộ lọc hoặc trang đổi
   useEffect(() => {
-    const id = ++reqId.current; // bỏ qua kết quả cũ nếu có request mới hơn
+    const id = ++reqId.current;
+
     setLoading(true);
 
-    counterService
-      .getList({ keyword: debounced, serviceName, use, page, pageSize })
+    getCounters({
+      keyword: debounced,
+      serviceName,
+      use,
+      page,
+      pageSize,
+    })
       .then((res) => {
         if (id !== reqId.current) return;
-        setItems(res.items);
+
+        setItems(res.items ?? []);
         setTotal(res.total);
       })
       .catch(() => {
-        if (id === reqId.current)
+        if (id === reqId.current) {
           message.error("Không tải được danh sách quầy");
+        }
       })
       .finally(() => {
-        if (id === reqId.current) setLoading(false);
+        if (id === reqId.current) {
+          setLoading(false);
+        }
       });
+
+    return () => {
+      // Vô hiệu hóa request cũ khi component đổi bộ lọc hoặc unmount
+      reqId.current++;
+    };
   }, [debounced, serviceName, use, page, pageSize]);
 
   const handleSelect = (counter: CounterSummary) => {

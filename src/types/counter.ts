@@ -36,6 +36,7 @@ export interface QueueTicket {
   issuedAt: string; // ISO: "2022-12-12T10:07:00"
   serviceName: string;
   status: QueueStatus;
+  audioSequence?: string[];
 }
 
 export interface QueueQuery {

@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import type { Key } from "react";
 import { DatePicker, Input, Select, Table, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import {
@@ -12,9 +11,9 @@ import { ClipboardList } from "lucide-react";
 import dayjs from "dayjs";
 import StartCart from "../dashboard/topCard/StartCart/StartCart";
 import PaginationBar from "../common/PaginationBar";
-import { counterService } from "../../api/services/counterService";
 import { QUEUE_STATUS_COLOR, QUEUE_STATUS_LABEL } from "../../constants/enums";
 import { QueueStats, QueueStatus, QueueTicket } from "../../types/counter";
+import { getQueueTickets } from "../../api/apiBE/queue";
 import styles from "./QueuePanel.module.css";
 
 const { RangePicker } = DatePicker;
@@ -24,6 +23,8 @@ interface Props {
   serviceName: string;
   stats: QueueStats | null;
   refreshKey: number;
+  selectedId?: string;
+  onSelectTicket: (t: QueueTicket | null) => void;
 }
 
 export default function QueuePanel({
@@ -31,6 +32,8 @@ export default function QueuePanel({
   serviceName,
   stats,
   refreshKey,
+  selectedId,
+  onSelectTicket,
 }: Props) {
   const [keyword, setKeyword] = useState("");
   const [debounced, setDebounced] = useState("");
@@ -44,7 +47,6 @@ export default function QueuePanel({
   const [items, setItems] = useState<QueueTicket[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
-  const [selectedKeys, setSelectedKeys] = useState<Key[]>([]);
 
   const reqId = useRef(0);
 
@@ -56,6 +58,7 @@ export default function QueuePanel({
     cancelled: 0,
   };
 
+  // Debounce ô tìm kiếm
   useEffect(() => {
     const t = setTimeout(() => {
       setDebounced(keyword);
@@ -64,19 +67,19 @@ export default function QueuePanel({
     return () => clearTimeout(t);
   }, [keyword]);
 
+  // Tải danh sách vé
   useEffect(() => {
     const id = ++reqId.current;
     setLoading(true);
 
-    counterService
-      .getQueue(counterId, {
-        keyword: debounced,
-        status,
-        startDate,
-        endDate,
-        page,
-        pageSize,
-      })
+    getQueueTickets(counterId, {
+      keyword: debounced,
+      status,
+      startDate,
+      endDate,
+      page,
+      pageSize,
+    })
       .then((res) => {
         if (id !== reqId.current) return;
         setItems(res.items);
@@ -129,13 +132,19 @@ export default function QueuePanel({
       title: "Hành động",
       align: "center",
       render: () => (
-        <span className={styles.actions}>
+        // stopPropagation: bấm icon không kích hoạt việc chọn dòng
+        <span className={styles.actions} onClick={(e) => e.stopPropagation()}>
           <EditOutlined onClick={notReady} />
           <InfoCircleOutlined onClick={notReady} />
         </span>
       ),
     },
   ];
+
+  // Bấm dòng để chọn; bấm lại dòng đang chọn thì bỏ chọn
+  const handleRowClick = (record: QueueTicket) => {
+    onSelectTicket(record.id === selectedId ? null : record);
+  };
 
   return (
     <div className={styles.panel}>
@@ -199,10 +208,7 @@ export default function QueuePanel({
             allowClear
             value={status}
             options={(Object.keys(QUEUE_STATUS_LABEL) as QueueStatus[]).map(
-              (k) => ({
-                label: QUEUE_STATUS_LABEL[k],
-                value: k,
-              }),
+              (k) => ({ label: QUEUE_STATUS_LABEL[k], value: k }),
             )}
             onChange={(v) => {
               setStatus(v);
@@ -235,10 +241,11 @@ export default function QueuePanel({
           dataSource={items}
           loading={loading}
           pagination={false}
-          rowSelection={{
-            selectedRowKeys: selectedKeys,
-            onChange: (keys) => setSelectedKeys(keys),
-          }}
+          rowClassName={(r) => (r.id === selectedId ? styles.rowSelected : "")}
+          onRow={(record) => ({
+            style: { cursor: "pointer" },
+            onClick: () => handleRowClick(record),
+          })}
         />
       </div>
 

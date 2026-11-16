@@ -22,7 +22,6 @@ const USE_MOCK = true; // Giữ nguyên mock cho các chức năng chưa nối B
 const BACKEND_URL = "https://localhost:7058";
 const delay = (ms = 300) => new Promise((r) => setTimeout(r, ms));
 
-
 export interface AudioCallEventDto {
   counterId: number;
   counterName: string;
@@ -62,7 +61,6 @@ export interface CounterMultiCallDisplayDto {
   callingTickets: { sttId: string; ticketNumber: number | null }[];
   waitingTickets: { sttId: string; ticketNumber: number | null }[];
 }
-
 
 export const counterService = {
   // Danh sách quầy để chọn trong form (đường dẫn API tạm, chờ backend)
@@ -119,7 +117,7 @@ export const counterService = {
     repeatCount = 1,
   ): Promise<void> {
     for (const ticket of tickets) {
-      const sttId = ticket.number || ticket.id;
+      const sttId = ticket.id;
       const audioRes = await axios.post<AudioCallEventDto>(
         `${BACKEND_URL}/api/v1/dsp/counters/${counterId}/play-audio`,
         null,
@@ -208,7 +206,10 @@ export const counterService = {
     let calledTickets: QueueTicket[] = [];
     if (USE_MOCK) {
       await delay(200);
-      MOCK_QUEUE_STATS.waiting = Math.max(0, MOCK_QUEUE_STATS.waiting - safeCount);
+      MOCK_QUEUE_STATS.waiting = Math.max(
+        0,
+        MOCK_QUEUE_STATS.waiting - safeCount,
+      );
       calledTickets = takeMockTickets(safeCount);
     } else {
       const res = await axios.post(`/counters/${counterId}/call`, {
@@ -219,7 +220,7 @@ export const counterService = {
 
     // Kích hoạt BE build chuỗi file .wav theo cấu hình Audio (CFG-04, CFG-05) và bắn SignalR OnCallNumberAudio
     for (const ticket of calledTickets) {
-      const sttId = ticket.number || ticket.id;
+      const sttId = ticket.id;
       const audioRes = await axios.post<AudioCallEventDto>(
         `${BACKEND_URL}/api/v1/dsp/counters/${counterId}/play-audio`,
         null,
@@ -250,7 +251,7 @@ export const counterService = {
     tickets: QueueTicket[],
   ): Promise<void> {
     for (const ticket of tickets) {
-      const sttId = ticket.number || ticket.id;
+      const sttId = ticket.id;
       const audioRes = await axios.post<AudioCallEventDto>(
         `${BACKEND_URL}/api/v1/dsp/counters/${counterId}/play-audio`,
         null,
