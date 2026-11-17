@@ -1,12 +1,7 @@
 import React, { useState } from "react";
-import {
-  Modal,
-  Form,
-  InputNumber,
-  Button,
-  message,
-} from "antd";
-import { ticketService } from "../../api/services/ticketService";
+import { Modal, Form, InputNumber, Button, message } from "antd";
+import { updateRange } from "../../api/apiBE/tickets";
+// Xóa dòng import ticketService nếu không còn dùng tới
 
 interface Props {
   open: boolean;
@@ -14,11 +9,7 @@ interface Props {
   onSuccess: () => void;
 }
 
-const ResetRangeModal: React.FC<Props> = ({
-  open,
-  onClose,
-  onSuccess,
-}) => {
+const ResetRangeModal: React.FC<Props> = ({ open, onClose, onSuccess }) => {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
 
@@ -33,24 +24,16 @@ const ResetRangeModal: React.FC<Props> = ({
 
       setLoading(true);
 
-      const rules = ticketService.getRules();
-
-      rules.forEach((rule) => {
-        ticketService.updateRule({
-          ...rule,
-          startNumber: values.startNumber,
-          endNumber: values.endNumber,
-          currentNumber: values.startNumber,
-        });
-      });
+      await updateRange(values.startNumber, values.endNumber);
 
       message.success("Thiết lập dải số thành công.");
 
       form.resetFields();
       onSuccess();
       onClose();
-    } catch {
-      // Form chưa hợp lệ
+    } catch (error) {
+      // Nếu lỗi từ API thì có thể thông báo thêm ở đây
+      console.error(error);
     } finally {
       setLoading(false);
     }
@@ -83,10 +66,7 @@ const ResetRangeModal: React.FC<Props> = ({
             },
           ]}
         >
-          <InputNumber
-            min={1}
-            style={{ width: "100%" }}
-          />
+          <InputNumber min={1} style={{ width: "100%" }} />
         </Form.Item>
 
         <Form.Item
@@ -99,10 +79,7 @@ const ResetRangeModal: React.FC<Props> = ({
             },
           ]}
         >
-          <InputNumber
-            min={1}
-            style={{ width: "100%" }}
-          />
+          <InputNumber min={1} style={{ width: "100%" }} />
         </Form.Item>
 
         <div

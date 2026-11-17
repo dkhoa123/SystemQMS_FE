@@ -1,12 +1,6 @@
-import React, { useState } from "react";
-import {
-  Modal,
-  Form,
-  Select,
-  Button,
-  message,
-} from "antd";
-import { ticketService } from "../../api/services/ticketService";
+import React, { useState, useEffect } from "react";
+import { Modal, Form, Select, Button, message } from "antd";
+import { issueTicket, getRules, TicketRule } from "../../api/apiBE/tickets";
 
 interface Props {
   open: boolean;
@@ -14,46 +8,52 @@ interface Props {
   onSuccess: () => void;
 }
 
-const services = [
-  "Khám sản - Phụ Khoa",
-  "Khám tim mạch",
-  "Khám răng hàm mặt",
-  "Khám tai mũi họng",
-  "Khám hô hấp",
-];
-
-const IssueTicketModal: React.FC<Props> = ({
-  open,
-  onClose,
-  onSuccess,
-}) => {
+const IssueTicketModal: React.FC<Props> = ({ open, onClose, onSuccess }) => {
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
+  const [services, setServices] = useState<TicketRule[]>([]);
+  const [fetching, setFetching] = useState(false);
 
-  const handleSubmit = () => {
-    form.validateFields().then((values) => {
-      try {
-        setLoading(true);
+  // Gọi API lấy danh sách dịch vụ mỗi khi mở Modal
+  useEffect(() => {
+    if (open) {
+      const fetchServices = async () => {
+        try {
+          setFetching(true);
+          const data = await getRules();
+          setServices(data);
+        } catch (error) {
+          message.error("Không thể tải danh sách dịch vụ.");
+        } finally {
+          setFetching(false);
+        }
+      };
 
-        const ticket = ticketService.issueTicket(values.serviceName);
+      fetchServices();
+    }
+  }, [open]);
 
-        message.success(
-          `Cấp số thành công: ${ticket.ticketNumber}`
-        );
+  const handleSubmit = async () => {
+    try {
+      const values = await form.validateFields();
 
-        form.resetFields();
-        onSuccess();
-        onClose();
-      } catch (error) {
-        message.error(
-          error instanceof Error
-            ? error.message
-            : "Không thể cấp số."
-        );
-      } finally {
-        setLoading(false);
-      }
-    });
+      setLoading(true);
+
+      // values.serviceId bây giờ sẽ khớp với name="serviceId" ở Form.Item
+      const ticket = await issueTicket(values.serviceId);
+
+      message.success(`Cấp số thành công: ${ticket.ticketNumber}`);
+
+      form.resetFields();
+      onSuccess();
+      onClose();
+    } catch (error) {
+      message.error(
+        error instanceof Error ? error.message : "Không thể cấp số.",
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -65,13 +65,10 @@ const IssueTicketModal: React.FC<Props> = ({
       centered
       width={440}
     >
-      <Form
-        form={form}
-        layout="vertical"
-        onFinish={handleSubmit}
-      >
+      <Form form={form} layout="vertical" onFinish={handleSubmit}>
+        {/* Sửa name thành "serviceId" để khớp với values.serviceId */}
         <Form.Item
-          name="serviceName"
+          name="serviceId"
           label="Tên dịch vụ"
           rules={[
             {
@@ -82,9 +79,10 @@ const IssueTicketModal: React.FC<Props> = ({
         >
           <Select
             placeholder="Chọn dịch vụ"
+            loading={fetching}
             options={services.map((service) => ({
-              label: service,
-              value: service,
+              label: service.serviceName,
+              value: service.serviceId, // Dùng serviceId theo interface TicketRule
             }))}
           />
         </Form.Item>

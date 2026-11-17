@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import { ClipboardList } from "lucide-react";
 import { Button, Card, DatePicker, Input, Select, Tooltip } from "antd";
 
@@ -11,7 +11,14 @@ import {
 
 import type { Dayjs } from "dayjs";
 
-import type { Ticket, TicketFilter } from "../../types/ticket";
+import { getStatistics } from "../../api/apiBE/tickets";
+
+import type {
+  Ticket,
+  TicketFilter,
+  TicketStatistics,
+} from "../../types/ticket";
+
 import { ticketService } from "../../api/services/ticketService";
 
 import IssueTicketModal from "../../components/tickets/IssueTicketModal";
@@ -45,7 +52,43 @@ const TicketListPage: React.FC = () => {
   const [refreshKey, setRefreshKey] = useState(0);
 
   // Lấy dữ liệu thống kê
-  const statistics = useMemo(() => ticketService.getStatistics(), [refreshKey]);
+  // const statistics = useMemo(() => ticketService.getStatistics(), [refreshKey]);
+
+  const [statistics, setStatistics] = useState<TicketStatistics>({
+    totalIssued: 0,
+    waiting: 0,
+    inUse: 0,
+    skipped: 0,
+  });
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchStatistics = async () => {
+      try {
+        const data = await getStatistics();
+
+        console.log("Statistics API:", data);
+
+        if (isMounted) {
+          setStatistics({
+            totalIssued: Number(data.totalIssued ?? 0),
+            waiting: Number(data.waiting ?? data.waiting ?? 0),
+            inUse: Number(data.inUse ?? data.inUse ?? 0),
+            skipped: Number(data.skipped ?? data.skipped ?? 0),
+          });
+        }
+      } catch (error) {
+        console.error("Lỗi khi lấy thống kê cấp số:", error);
+      }
+    };
+
+    fetchStatistics();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [refreshKey]);
 
   // Làm mới dữ liệu
   const refresh = () => {
@@ -110,6 +153,7 @@ const TicketListPage: React.FC = () => {
           percent={10}
           colorVariant="blue"
         />
+
         <StartCart
           title="Số thứ tự đang chờ"
           iconRight={ClipboardList}
@@ -117,6 +161,7 @@ const TicketListPage: React.FC = () => {
           percent={-10}
           colorVariant="orange"
         />
+
         <StartCart
           title="Số thứ tự đã sử dụng"
           iconRight={ClipboardList}
@@ -124,6 +169,7 @@ const TicketListPage: React.FC = () => {
           percent={10}
           colorVariant="green"
         />
+
         <StartCart
           title="Số thứ tự bỏ qua"
           iconRight={ClipboardList}

@@ -1,9 +1,9 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Button, Select, Table } from "antd";
 import type { ColumnsType } from "antd/es/table";
 
 import type { Ticket, TicketFilter } from "../../types/ticket";
-import { ticketService } from "../../api/services/ticketService";
+import { getTickets } from "../../api/apiBE/tickets";
 import StatusTag from "../common/StatusTag";
 
 import styles from "./TicketList.module.css";
@@ -19,8 +19,13 @@ const TicketListModal: React.FC<TicketListModalProps> = ({
   refreshKey,
   pageSize: initialPageSize = 10,
 }) => {
+  console.log("TicketListModal rendered");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(initialPageSize);
+
+  const [tickets, setTickets] = useState<Ticket[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(false);
 
   // Đồng bộ pageSize khi cha thay đổi
   useEffect(() => {
@@ -28,20 +33,58 @@ const TicketListModal: React.FC<TicketListModalProps> = ({
     setPage(1);
   }, [initialPageSize]);
 
-  // Lấy dữ liệu từ ticketService
-  const tickets = useMemo(
-    () => ticketService.search(filters),
-    [filters, refreshKey],
-  );
+  // Khi thay đổi bộ lọc, quay lại trang đầu
+  useEffect(() => {
+    setPage(1);
+  }, [filters]);
 
-  // Tính tổng số trang
-  const totalPages = Math.max(1, Math.ceil(tickets.length / pageSize));
+  // Lấy danh sách vé từ Backend
+  useEffect(() => {
+    console.log("TicketListModal useEffect chạy");
 
-  // Lấy dữ liệu theo trang
-  const pagedTickets = useMemo(() => {
-    const start = (page - 1) * pageSize;
-    return tickets.slice(start, start + pageSize);
-  }, [tickets, page, pageSize]);
+    let isMounted = true;
+
+    const fetchTickets = async () => {
+      setLoading(true);
+
+      try {
+        console.log("Fetching tickets:", {
+          filters,
+          page,
+          pageSize,
+        });
+
+        const response = await getTickets(page, pageSize, filters);
+
+        console.log("Tickets API response:", response);
+
+        if (isMounted) {
+          setTickets(response.items ?? []);
+          setTotal(response.total ?? 0);
+        }
+      } catch (error) {
+        console.error("Lỗi khi lấy danh sách cấp số:", error);
+
+        if (isMounted) {
+          setTickets([]);
+          setTotal(0);
+        }
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
+    };
+
+    fetchTickets();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [page, pageSize, filters, refreshKey]);
+
+  // Tính tổng số trang dựa trên tổng bản ghi từ Backend
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   // Các cột của bảng
   const columns: ColumnsType<Ticket> = [
@@ -59,14 +102,14 @@ const TicketListModal: React.FC<TicketListModalProps> = ({
     },
     {
       title: "Thời gian cấp",
-      dataIndex: "issueTime",
-      key: "issueTime",
+      dataIndex: "issuedTime",
+      key: "issuedTime",
       width: 145,
     },
     {
       title: "Thời gian sử dụng",
-      dataIndex: "useTime",
-      key: "useTime",
+      dataIndex: "usedTime",
+      key: "usedTime",
       width: 145,
     },
     {
@@ -92,14 +135,14 @@ const TicketListModal: React.FC<TicketListModalProps> = ({
 
   return (
     <div className={styles.tableWrapper}>
-      {/* Table danh sách cấp số */}
       <div className={styles.tableContainer}>
         <Table<Ticket>
           columns={columns}
-          dataSource={pagedTickets}
+          dataSource={tickets}
           rowKey="id"
           size="small"
           pagination={false}
+          loading={loading}
           scroll={{ x: 1100 }}
           rowClassName={(record) =>
             record.status === "PROCESSING" ? styles.highlightRow : ""
@@ -132,7 +175,7 @@ const TicketListModal: React.FC<TicketListModalProps> = ({
 
         <div className={styles.pagination}>
           <Button
-            disabled={page === 1}
+            disabled={page <= 1 || loading}
             onClick={() => setPage((prev) => prev - 1)}
           >
             ‹ Trước
@@ -143,7 +186,7 @@ const TicketListModal: React.FC<TicketListModalProps> = ({
           </span>
 
           <Button
-            disabled={page >= totalPages}
+            disabled={page >= totalPages || loading}
             onClick={() => setPage((prev) => prev + 1)}
           >
             Sau ›
