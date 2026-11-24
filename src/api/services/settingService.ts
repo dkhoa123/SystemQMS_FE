@@ -2,7 +2,7 @@ import axios from 'axios';
 import type { DisplaySetting, AudioSetting, SpeechSpeed } from '../../types/setting';
 import { displaySettingMock, MOCK_AUDIO_SETTING } from '../../mock/settings.mock';
 
-const USE_MOCK = false; // Đã chuyển sang gọi API thật
+const USE_MOCK = false;
 
 export const BACKEND_ORIGIN = 'https://localhost:7058';
 const DISPLAY_API_URL = `${BACKEND_ORIGIN}/alta-api/api/configs/display`;
@@ -12,7 +12,7 @@ export interface AudioTemplateItem {
     id: number;
     name: string;
     description: string;
-    templateText: string; // Chuỗi chứa token {soThuTu}, {quayTen} để hiển thị chip trên UI
+    templateText: string;
 }
 
 export interface AudioConfigResponse {
@@ -37,11 +37,16 @@ export interface AudioPreviewResponse {
     readingSpeed: number;
 }
 
-// Ánh xạ 3 mẫu hardcode ở BE sang chuỗi có token để UI render chip cam
 const TEMPLATE_TOKEN_MAP: Record<number, string> = {
     1: 'Xin mời số thứ tự {soThuTu} đến quầy {quayTen}',
     2: '{soThuTu} đến quầy {quayTen}',
     3: 'Xin mời số thứ tự {soThuTu}',
+};
+
+const resolveImageUrl = (url?: string | null): string | undefined => {
+    if (!url) return undefined;
+    if (url.startsWith('http') || url.startsWith('data:')) return url;
+    return `${BACKEND_ORIGIN}${url.startsWith('/') ? '' : '/'}${url}`;
 };
 
 export const settingService = {
@@ -55,7 +60,7 @@ export const settingService = {
         return {
             unitName: data.unitName,
             logoUrl: data.logoUrl,
-            backgroundUrl: data.backgroundImageUrl,
+            backgroundUrl: resolveImageUrl(data.backgroundImageUrl),
             bannerText: data.bannerText,
             themeColor: data.toneColorHex,
         } as DisplaySetting;
@@ -70,13 +75,21 @@ export const settingService = {
 
         const formData = new FormData();
         if (body.unitName !== undefined) formData.append('UnitName', body.unitName);
-        if (body.bannerText) formData.append('BannerText', body.bannerText);
-        if (body.themeColor) formData.append('ToneColorHex', body.themeColor);
+        if (body.bannerText !== undefined) formData.append('BannerText', body.bannerText);
+        if (body.themeColor !== undefined) formData.append('ToneColorHex', body.themeColor);
         if (backgroundFile) formData.append('BackgroundFile', backgroundFile);
         if (logoFile) formData.append('LogoFile', logoFile);
 
         const res = await axios.put(DISPLAY_API_URL, formData);
-        return res.data.data;
+        const data = res.data.data;
+
+        return {
+            unitName: data.unitName,
+            logoUrl: data.logoUrl,
+            backgroundUrl: resolveImageUrl(data.backgroundImageUrl),
+            bannerText: data.bannerText,
+            themeColor: data.toneColorHex,
+        } as DisplaySetting;
     },
 
     async resetDisplayField(fieldName: string): Promise<void> {
