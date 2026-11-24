@@ -6,7 +6,9 @@ import {
     DeleteOutlined, EditOutlined, KeyOutlined, SearchOutlined, UserAddOutlined,
 } from '@ant-design/icons';
 import { accountService } from '../../../api/services/accountService';
-import { roleService } from '../../../api/services/roleService';
+// import { roleService } from '../../../api/services/roleService';
+// [THÊM MỚI]
+import { getRoles } from '../../../api/apiBE/role';
 import PaginationBar from '../../../components/common/PaginationBar';
 import AccountFormModal from '../../../components/accounts/AccountFormModal';
 import ChangePasswordModal from '../../../components/accounts/ChangePasswordModal';
@@ -35,14 +37,25 @@ export default function AccountListPage() {
     const [deleteOpen, setDeleteOpen] = useState(false);
     const [deleting, setDeleting] = useState(false);
 
-    // Tải danh sách vai trò cho ô lọc "Vai trò"
+// [SỬA] Tải danh sách vai trò từ API BE cho ô lọc "Vai trò"
     useEffect(() => {
-        roleService
-            .getList({ page: 1, pageSize: 100 })
-            .then((res) => setRoles(res.items))
-            .catch((error) => {
-                message.error(error instanceof Error ? error.message : 'Không tải được danh sách vai trò');
+        let active = true;
+
+        getRoles({ page: 1, pageSize: 100 })
+            .then((res) => {
+                if (active) setRoles(res.items);
+            })
+            .catch((error: any) => {
+                if (active) {
+                    message.error(
+                        error.response?.data?.message || 'Không tải được danh sách vai trò'
+                    );
+                }
             });
+
+        return () => {
+            active = false;
+        };
     }, []);
 
     // Chờ 400ms sau khi ngừng gõ mới tìm

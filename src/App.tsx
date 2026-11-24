@@ -63,6 +63,7 @@ function App() {
             {/* Cài đặt hệ thống */}
             <Route path={ROUTES.ROLES} element={<RoleListPage />} />
             <Route path={ROUTES.ROLE_CREATE} element={<RoleFormPage />} />
+            <Route path={ROUTES.ROLE_EDIT} element={<RoleFormPage />} />
             <Route path={ROUTES.ROLE_DETAIL} element={<RoleDetailPage />} />
             <Route path={ROUTES.ACCOUNTS} element={<AccountListPage />} />
             <Route path={ROUTES.LOGO} element={<LogoPage />} />

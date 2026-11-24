@@ -18,6 +18,7 @@ export const ROUTES = {
   PROFILE: "/profile",
   ROLES: "/settings/roles",
   ROLE_DETAIL: "/settings/roles/:roleId",
+  ROLE_EDIT: "/settings/roles/:roleId/edit",
   LOGO: "/settings/logo",
   COUNTER_WORK: "/counters/:counterId/work",
 } as const;
@@ -54,6 +55,12 @@ export const PAGE_TITLES: PageTitle[] = [
     path: ROUTES.ROLE_DETAIL,
     parent: "Cài đặt hệ thống / Quản lý vai trò",
     title: "Chi tiết vai trò",
+  },
+  //Thêm mới tiêu đề Header cho trang cập nhật vai trò
+  {
+    path: ROUTES.ROLE_EDIT,
+    parent: "Cài đặt hệ thống / Quản lý vai trò",
+    title: "Cập nhật vai trò",
   },
   {
     path: ROUTES.ACCOUNTS,
@@ -125,6 +132,10 @@ export const PAGE_TITLES: PageTitle[] = [
 // Tạo đường dẫn chi tiết theo ID vai trò
 export const buildRoleDetailPath = (roleId: string) =>
   `/settings/roles/${encodeURIComponent(roleId)}`;
+
+// Thêm mới hàm tạo URL cập nhật vai trò
+export const buildRoleEditPath = (roleId: string) =>
+  `/settings/roles/${encodeURIComponent(roleId)}/edit`;
 
 export const buildServiceDetailPath = (serviceId: string) =>
   `/services/${encodeURIComponent(serviceId)}`;

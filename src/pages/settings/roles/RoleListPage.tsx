@@ -1,10 +1,13 @@
-import { useCallback, useEffect, useState } from 'react';
+// import { useCallback, useEffect, useState } from 'react';
+// [SỬA] Bỏ useCallback, đổi roleService sang apiBE/roles
+import { useEffect, useState } from 'react';
 import type { Key } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button, Input, Table, message } from 'antd';
 import type { TableColumnsType } from 'antd';
 import { DeleteOutlined, EditOutlined, SearchOutlined, UserAddOutlined } from '@ant-design/icons';
-import { roleService } from '../../../api/services/roleService';
+// import { roleService } from '../../../api/services/roleService';
+import { deleteRoles, getRoles } from '../../../api/apiBE/role';
 import PaginationBar from '../../../components/common/PaginationBar';
 import ConfirmDialog from '../../../components/common/ConfirmDialog';
 import { buildRoleDetailPath, ROUTES } from '../../../constants/routes';
@@ -24,6 +27,8 @@ export default function RoleListPage() {
   const [selectedKeys, setSelectedKeys] = useState<Key[]>([]);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  // [THÊM MỚI] State kích hoạt tải lại danh sách sau khi xóa
+  const [refreshKey, setRefreshKey] = useState(0);
 
   const handleAdd = () => navigate(ROUTES.ROLE_CREATE);
   const handleEdit = (role: Role) => navigate(buildRoleDetailPath(role.roleId));
@@ -39,23 +44,55 @@ export default function RoleListPage() {
   }, [searchText]);
 
   // Lấy danh sách vai trò
-  const fetchData = useCallback(async () => {
-    setLoading(true);
+  // const fetchData = useCallback(async () => {
+  //   setLoading(true);
 
-    try {
-      const res = await roleService.getList({ page, pageSize, keyword });
-      setItems(res.items);
-      setTotal(res.total);
-    } catch (error) {
-      message.error(error instanceof Error ? error.message : 'Không thể tải danh sách vai trò');
-    } finally {
-      setLoading(false);
-    }
-  }, [page, pageSize, keyword]);
+  //   try {
+  //     const res = await roleService.getList({ page, pageSize, keyword });
+  //     setItems(res.items);
+  //     setTotal(res.total);
+  //   } catch (error) {
+  //     message.error(error instanceof Error ? error.message : 'Không thể tải danh sách vai trò');
+  //   } finally {
+  //     setLoading(false);
+  //   }
+  // }, [page, pageSize, keyword]);
 
+  // useEffect(() => {
+  //   void fetchData();
+  // }, [fetchData]);
+
+  // [sửa] Lấy danh sách vai trò từ API BE 
   useEffect(() => {
-    void fetchData();
-  }, [fetchData]);
+    let active = true;
+
+    const fetchRoles = async () => {
+      setLoading(true);
+      try {
+        const res = await getRoles({ page, pageSize, keyword });
+        if (active) {
+          setItems(res.items);
+          setTotal(res.total);
+        }
+      } catch (error: any) {
+        if (active) {
+          message.error(
+            error.response?.data?.message || 'Không thể tải danh sách vai trò'
+          );
+        }
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
+      }
+    };
+
+    void fetchRoles();
+
+    return () => {
+      active = false;
+    };
+  }, [page, pageSize, keyword, refreshKey]);
 
   // Xóa vai trò đã chọn
   const handleDelete = () => {
@@ -67,16 +104,37 @@ export default function RoleListPage() {
     setDeleteOpen(true);
   };
 
+  // const handleConfirmDelete = async () => {
+  //   setDeleting(true);
+  //   try {
+  //     await roleService.remove(selectedKeys.map(String));
+  //     message.success('Đã xóa vai trò');
+  //     setSelectedKeys([]);
+  //     setDeleteOpen(false);
+  //     await fetchData();
+  //   } catch (error) {
+  //     message.error(error instanceof Error ? error.message : 'Xóa thất bại');
+  //   } finally {
+  //     setDeleting(false);
+  //   }
+  // };
+
+  // [SỬA] Gọi API xóa thật và tăng refreshKey để reload bảng
   const handleConfirmDelete = async () => {
     setDeleting(true);
     try {
-      await roleService.remove(selectedKeys.map(String));
+      const ids = selectedKeys.map(String);
+      await deleteRoles(ids);
       message.success('Đã xóa vai trò');
       setSelectedKeys([]);
       setDeleteOpen(false);
-      await fetchData();
-    } catch (error) {
-      message.error(error instanceof Error ? error.message : 'Xóa thất bại');
+
+      const remainingTotal = Math.max(0, total - ids.length);
+      const lastPage = Math.max(1, Math.ceil(remainingTotal / pageSize));
+      setPage((currentPage) => Math.min(currentPage, lastPage));
+      setRefreshKey((current) => current + 1);
+    } catch (error: any) {
+      message.error(error.response?.data?.message || 'Xóa vai trò thất bại');
     } finally {
       setDeleting(false);
     }

@@ -1,16 +1,20 @@
-import { useCallback, useEffect, useState } from 'react';
+// import { useCallback, useEffect, useState } from 'react';
+// [SỬA] Bỏ useCallback, đổi roleService sang apiBE/roles và thêm buildRoleEditPath
+import { useEffect, useState } from 'react';
 import type { Key, ReactNode } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Button, Input, Modal, Select, Spin, Table, message } from 'antd';
 import type { TableColumnsType } from 'antd';
 import { DeleteOutlined, EditOutlined, SearchOutlined } from '@ant-design/icons';
-import { roleService } from '../../../api/services/roleService';
+// import { roleService } from '../../../api/services/roleService';
+import { getPermissionGroups, getRoleById } from '../../../api/apiBE/role';
 import { accountService } from '../../../api/services/accountService';
 import PaginationBar from '../../../components/common/PaginationBar';
 import PermissionSummary from '../../../components/roles/PermissionSummary';
 import { ACCOUNT_STATUS, ACCOUNT_STATUS_LABEL } from '../../../constants/enums';
 import type { AccountStatus } from '../../../constants/enums';
-import { ROUTES } from '../../../constants/routes';
+// import { ROUTES } from '../../../constants/routes';
+import { buildRoleEditPath, ROUTES } from '../../../constants/routes';
 import type { Account } from '../../../types/account';
 import type { PermissionGroup, Role } from '../../../types/role';
 import styles from './RoleDetailPage.module.css';
@@ -39,18 +43,31 @@ export default function RoleDetailPage() {
   const [status, setStatus] = useState<AccountStatus | 'ALL'>('ALL');
   const [loading, setLoading] = useState(false);
   const [selectedKeys, setSelectedKeys] = useState<Key[]>([]);
+  // [THÊM MỚI] State kích hoạt tải lại danh sách tài khoản
+  const [refreshKey, setRefreshKey] = useState(0);
 
-  // Tải thông tin vai trò + danh sách nhóm quyền
+// [SỬA] Tải thông tin vai trò + danh sách nhóm quyền từ API BE
   useEffect(() => {
-    Promise.all([roleService.getById(roleId), roleService.getPermissionGroups()])
+    if (!roleId) return;
+    let active = true;
+
+    Promise.all([getRoleById(roleId), getPermissionGroups()])
       .then(([r, g]) => {
+        if (!active) return;
         setRole(r);
         setGroups(g);
       })
-      .catch((error) => {
-        message.error(error instanceof Error ? error.message : 'Không tải được vai trò');
+      .catch((error: any) => {
+        if (!active) return;
+        message.error(
+          error.response?.data?.message || 'Không tải được vai trò'
+        );
         navigate(ROUTES.ROLES, { replace: true });
       });
+
+    return () => {
+      active = false;
+    };
   }, [roleId, navigate]);
 
   // Chờ 400ms sau khi ngừng gõ mới tìm
@@ -62,32 +79,102 @@ export default function RoleDetailPage() {
     return () => clearTimeout(timer);
   }, [searchText]);
 
-  const fetchAccounts = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await accountService.getListByRole({
-        roleId,
-        page,
-        pageSize,
-        keyword,
-        status: status === 'ALL' ? undefined : status,
-      });
-      setAccounts(res.items);
-      setTotal(res.total);
-    } catch (error) {
-      message.error(error instanceof Error ? error.message : 'Không thể tải danh sách tài khoản');
-    } finally {
-      setLoading(false);
-    }
-  }, [roleId, page, pageSize, keyword, status]);
+  // const fetchAccounts = useCallback(async () => {
+  //   setLoading(true);
+  //   try {
+  //     const res = await accountService.getListByRole({
+  //       roleId,
+  //       page,
+  //       pageSize,
+  //       keyword,
+  //       status: status === 'ALL' ? undefined : status,
+  //     });
+  //     setAccounts(res.items);
+  //     setTotal(res.total);
+  //   } catch (error) {
+  //     message.error(error instanceof Error ? error.message : 'Không thể tải danh sách tài khoản');
+  //   } finally {
+  //     setLoading(false);
+  //   }
+  // }, [roleId, page, pageSize, keyword, status]);
 
+  // useEffect(() => {
+  //   void fetchAccounts();
+  // }, [fetchAccounts]);
+
+  // const handleUpdateRole = () => {
+  //   // TODO: mở màn cập nhật vai trò (ACC-22)
+  //   message.info('Mở màn cập nhật vai trò');
+  // };
+
+  // const handleEditAccount = (account: Account) => {
+  //   // TODO: mở màn sửa tài khoản
+  //   message.info(`Sửa tài khoản: ${account.username}`);
+  // };
+
+  // const handleDelete = () => {
+  //   Modal.confirm({
+  //     title: 'Xác nhận xóa',
+  //     content: `Bạn có chắc muốn xóa ${selectedKeys.length} tài khoản đã chọn?`,
+  //     okText: 'Xóa',
+  //     cancelText: 'Hủy',
+  //     okButtonProps: { danger: true },
+  //     onOk: async () => {
+  //       try {
+  //         await accountService.remove(selectedKeys as string[]);
+  //         message.success('Đã xóa tài khoản');
+  //         setSelectedKeys([]);
+  //         await fetchAccounts();
+  //       } catch (error) {
+  //         message.error(error instanceof Error ? error.message : 'Xóa thất bại');
+  //       }
+  //     },
+  //   });
+  // };
+
+  // [SỬA] Chuyển sang pattern useEffect + let active = true + refreshKey
   useEffect(() => {
-    void fetchAccounts();
-  }, [fetchAccounts]);
+    if (!roleId) return;
+    let active = true;
 
+    const fetchAccounts = async () => {
+      setLoading(true);
+      try {
+        const res = await accountService.getListByRole({
+          roleId,
+          page,
+          pageSize,
+          keyword,
+          status: status === 'ALL' ? undefined : status,
+        });
+        if (active) {
+          setAccounts(res.items);
+          setTotal(res.total);
+        }
+      } catch (error) {
+        if (active) {
+          message.error(
+            error instanceof Error ? error.message : 'Không thể tải danh sách tài khoản'
+          );
+        }
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
+      }
+    };
+
+    void fetchAccounts();
+
+    return () => {
+      active = false;
+    };
+  }, [roleId, page, pageSize, keyword, status, refreshKey]);
+
+  // [SỬA] Điều hướng sang trang cập nhật vai trò
   const handleUpdateRole = () => {
-    // TODO: mở màn cập nhật vai trò (ACC-22)
-    message.info('Mở màn cập nhật vai trò');
+    if (!roleId) return;
+    navigate(buildRoleEditPath(roleId));
   };
 
   const handleEditAccount = (account: Account) => {
@@ -107,7 +194,8 @@ export default function RoleDetailPage() {
           await accountService.remove(selectedKeys as string[]);
           message.success('Đã xóa tài khoản');
           setSelectedKeys([]);
-          await fetchAccounts();
+          // [SỬA] Kích hoạt reload danh sách
+          setRefreshKey((current) => current + 1);
         } catch (error) {
           message.error(error instanceof Error ? error.message : 'Xóa thất bại');
         }
