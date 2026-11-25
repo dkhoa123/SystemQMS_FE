@@ -25,18 +25,18 @@ const filterMapping: Record<TimeFilterMode, string> = {
 
 export async function getTicketIssuedStatistics(
   filter: TimeFilterMode,
-  fromDate: string,
-  toDate: string,
+  fromDate?: string,
+  toDate?: string,
 ): Promise<LineChartPoint[]> {
   const response = await axiosClient.get("/Dashboard/tickets/issued", {
     params: {
       filter: filterMapping[filter],
-      fromDate,
-      toDate,
+      ...(fromDate && { fromDate }),
+      ...(toDate && { toDate }),
     },
   });
 
-  return response.data;
+  return response.data.data ?? response.data;
 }
 
 export interface ServiceBarPoint {
@@ -46,16 +46,17 @@ export interface ServiceBarPoint {
 
 export async function getServiceBarStatistics(
   filter: TimeFilterMode,
-  fromDate: string,
+  fromDate?: string,
 ): Promise<ServiceBarPoint[]> {
   try {
     const response = await axiosClient.get("/Dashboard/tickets/by-service", {
       params: {
         filter: filterMapping[filter],
-        fromDate,
+        ...(fromDate && { fromDate }),
       },
     });
-    return response.data;
+
+    return response.data.data ?? response.data;
   } catch (error) {
     console.error("Error fetching service bar statistics:", error);
     throw error;
@@ -85,4 +86,48 @@ export async function getCountByStatus(): Promise<CountByStatus> {
     console.error("Error fetching count by status:", error);
     throw error;
   }
+}
+
+export interface TrendPoint {
+  percentIssued?: number;
+  percentWaiting?: number;
+  percentUsed?: number;
+  percentSkipped?: number;
+}
+
+export async function getTrendStatistics(
+  value: TrendPoint,
+): Promise<TrendPoint> {
+  try {
+    const response = await axiosClient.get("/Dashboard/tickets/trend", {
+      params: value,
+    });
+    return response.data.data ?? response.data;
+  } catch (error) {
+    console.error("Error fetching trend statistics:", error);
+    throw error;
+  }
+}
+
+export interface RatingBarResponse {
+  serviceId: number;
+  serviceName: string;
+  averageRating: number;
+}
+
+export interface ServiceRatioResponse {
+  serviceId: number;
+  serviceName: string;
+  totalUsed: number;
+}
+
+export interface DashboardServiceStatistics {
+  ratingBars: RatingBarResponse[];
+  serviceRatios: ServiceRatioResponse[];
+}
+
+export async function getServiceStatistics(): Promise<DashboardServiceStatistics> {
+  const response = await axiosClient.get("/Dashboard/services/statistics");
+
+  return response.data.data ?? response.data;
 }

@@ -5,7 +5,13 @@ import { Monitor, MessageSquare, Layers } from "lucide-react";
 import ServicePieChart from "./ServicePieChart";
 import RatingBars from "./RatingBars";
 
-import { CountByStatus, getCountByStatus } from "../../../api/apiBE/dashboards";
+import {
+  CountByStatus,
+  DashboardServiceStatistics,
+  getCountByStatus,
+  getServiceStatistics,
+  TimeFilterMode,
+} from "../../../api/apiBE/dashboards";
 
 const MINI_CARD_DATA = [
   {
@@ -126,6 +132,33 @@ const RightSidebar = () => {
     },
   ];
 
+  const [serviceStatistics, setServiceStatistics] =
+    useState<DashboardServiceStatistics | null>(null);
+  useEffect(() => {
+    const fetchServiceStatistics = async () => {
+      try {
+        const result = await getServiceStatistics();
+        setServiceStatistics(result);
+      } catch (error) {
+        console.error("Error fetching service statistics:", error);
+      }
+    };
+
+    fetchServiceStatistics();
+  }, []);
+
+  const SERVICE_COLORS = [
+    "#22D3EE",
+    "#FF9640",
+    "#3B82F6",
+    "#22C55E",
+    "#F87171",
+    "#A855F7",
+  ];
+
+  const getServiceColor = (serviceId: number) =>
+    SERVICE_COLORS[Math.abs(serviceId) % SERVICE_COLORS.length];
+
   return (
     <aside className={styles.container}>
       <div className={styles.cardList}>
@@ -140,8 +173,25 @@ const RightSidebar = () => {
           />
         ))}
       </div>
-      <ServicePieChart />
-      <RatingBars />
+      <ServicePieChart
+        data={
+          serviceStatistics?.serviceRatios.map((item) => ({
+            title: item.serviceName,
+            value: item.totalUsed,
+            color: getServiceColor(item.serviceId),
+          })) ?? []
+        }
+      />
+      <RatingBars
+        data={
+          serviceStatistics?.ratingBars.map((item) => ({
+            id: String(item.serviceId),
+            name: item.serviceName,
+            value: item.averageRating,
+            color: getServiceColor(item.serviceId),
+          })) ?? []
+        }
+      />
     </aside>
   );
 };

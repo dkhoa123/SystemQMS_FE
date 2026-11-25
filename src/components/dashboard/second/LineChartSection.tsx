@@ -60,9 +60,8 @@ export default function LineChartSection({
 
   const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
 
-  const [fromDate, setFromDate] = useState(formatDate(firstDay));
-
-  const [toDate, setToDate] = useState(formatDate(today));
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
 
   const handleFilterChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newMode = e.target.value as TimeFilterMode;

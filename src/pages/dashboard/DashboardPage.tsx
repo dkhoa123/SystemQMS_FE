@@ -40,22 +40,20 @@ export default function DashboardPage() {
   const [serviceData, setServiceData] = useState<ServiceBarPoint[]>([]);
   const [isServiceLoading, setIsServiceLoading] = useState(false);
 
-  const [fromDate, setFromDate] = useState("2026-11-09");
-
   const [filters, setFilters] = useState<TicketFilter>({});
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
-  // State ngày được nhận từ component con
-  const [dateRange, setDateRange] = useState(getInitialDateRange);
+  const [dateRange, setDateRange] = useState<{
+    fromDate?: string;
+    toDate?: string;
+  }>({});
 
   const fetchStatistics = async (
     selectedFilter: TimeFilterMode,
-    fromDate: string,
-    toDate: string,
+    fromDate?: string,
+    toDate?: string,
   ) => {
-    if (!fromDate || !toDate) return;
-
     setLoading(true);
 
     try {
@@ -78,7 +76,7 @@ export default function DashboardPage() {
     try {
       setIsServiceLoading(true);
 
-      const result = await getServiceBarStatistics(filterService, fromDate);
+      const result = await getServiceBarStatistics(filterService);
 
       setServiceData(result);
     } catch (error) {
@@ -91,17 +89,14 @@ export default function DashboardPage() {
 
   // Khi người dùng thay đổi filter hoặc ngày
   useEffect(() => {
-    if (!dateRange.fromDate || !dateRange.toDate) return;
-
     fetchStatistics(filter, dateRange.fromDate, dateRange.toDate);
   }, [filter, dateRange]);
 
   // Khi người dùng thay đổi filterService hoặc fromDate
   useEffect(() => {
-    if (!fromDate) return;
-
     fetchServiceStatistics();
-  }, [filterService, fromDate]);
+  }, [filterService]);
+
   return (
     <div className={styles.container}>
       {/* cọt trá*/}
