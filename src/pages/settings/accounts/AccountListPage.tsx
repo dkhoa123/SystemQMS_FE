@@ -5,7 +5,8 @@ import type { TableColumnsType } from 'antd';
 import {
     DeleteOutlined, EditOutlined, KeyOutlined, SearchOutlined, UserAddOutlined,
 } from '@ant-design/icons';
-import { accountService } from '../../../api/services/accountService';
+// import { accountService } from '../../../api/services/accountService';
+import { deleteAccounts, getAccounts } from '../../../api/apiBE/accounts';
 // import { roleService } from '../../../api/services/roleService';
 // [THÊM MỚI]
 import { getRoles } from '../../../api/apiBE/role';
@@ -33,6 +34,7 @@ export default function AccountListPage() {
     const [selectedKeys, setSelectedKeys] = useState<Key[]>([]);
 
     const [formOpen, setFormOpen] = useState(false);
+    const [editingAccount, setEditingAccount] = useState<Account | null>(null);
     const [passwordAccount, setPasswordAccount] = useState<Account | null>(null);
     const [deleteOpen, setDeleteOpen] = useState(false);
     const [deleting, setDeleting] = useState(false);
@@ -71,7 +73,8 @@ export default function AccountListPage() {
     const fetchData = useCallback(async () => {
         setLoading(true);
         try {
-            const res = await accountService.getList({
+            // const res = await accountService.getList({
+            const res = await getAccounts({
                 page,
                 pageSize,
                 keyword,
@@ -80,8 +83,11 @@ export default function AccountListPage() {
             });
             setItems(res.items);
             setTotal(res.total);
-        } catch (error) {
-            message.error(error instanceof Error ? error.message : 'Không thể tải danh sách tài khoản');
+        } catch (error: any) {
+            message.error(
+                error?.response?.data?.message ||
+                    (error instanceof Error ? error.message : 'Không thể tải danh sách tài khoản')
+            );
         } finally {
             setLoading(false);
         }
@@ -91,11 +97,17 @@ export default function AccountListPage() {
         void fetchData();
     }, [fetchData]);
 
-    const handleAdd = () => setFormOpen(true);
+    // const handleAdd = () => setFormOpen(true);
+    const handleAdd = () => {
+        setEditingAccount(null);
+        setFormOpen(true);
+    };
 
     const handleEdit = (account: Account) => {
         // TODO: mở popup/màn sửa tài khoản (ACC-11)
-        message.info(`Sửa tài khoản: ${account.username}`);
+        // message.info(`Sửa tài khoản: ${account.username}`);
+        setEditingAccount(account);
+        setFormOpen(true);
     };
 
     const handleChangePassword = (account: Account) => setPasswordAccount(account);
@@ -113,13 +125,19 @@ export default function AccountListPage() {
     const handleConfirmDelete = async () => {
         setDeleting(true);
         try {
-            await accountService.remove(selectedKeys as string[]);
+            // await accountService.remove(selectedKeys as string[]);
+            await deleteAccounts(selectedKeys as string[]);
             message.success('Đã xóa tài khoản');
             setSelectedKeys([]);
             setDeleteOpen(false);
             await fetchData();
-        } catch (error) {
-            message.error(error instanceof Error ? error.message : 'Xóa thất bại');
+        // } catch (error) {
+        //     message.error(error instanceof Error ? error.message : 'Xóa thất bại');
+            } catch (error: any) {
+            message.error(
+                error?.response?.data?.message ||
+                    (error instanceof Error ? error.message : 'Xóa thất bại')
+            );
         } finally {
             setDeleting(false);
         }
@@ -265,7 +283,12 @@ export default function AccountListPage() {
             <AccountFormModal
                 open={formOpen}
                 roles={roles}
-                onClose={() => setFormOpen(false)}
+                // onClose={() => setFormOpen(false)}
+                account={editingAccount}
+                onClose={() => {
+                    setFormOpen(false);
+                    setEditingAccount(null);
+                }}
                 onSuccess={fetchData}
             />
             <ChangePasswordModal

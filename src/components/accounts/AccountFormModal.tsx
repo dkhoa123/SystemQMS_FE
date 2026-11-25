@@ -1,10 +1,14 @@
 import { useEffect, useState } from 'react';
 import { Button, Form, Input, Modal, Select, message } from 'antd';
-import { accountService } from '../../api/services/accountService';
+// import { accountService } from '../../api/services/accountService';
+// [THÊM MỚI]
+import { createAccount, updateAccount } from '../../api/apiBE/accounts';
 import { counterService } from '../../api/services/counterService';
 import { ACCOUNT_STATUS, ACCOUNT_STATUS_LABEL } from '../../constants/enums';
 import { VALIDATION } from '../../constants/validation';
-import type { AccountForm } from '../../types/account';
+// import type { AccountForm } from '../../types/account';
+// [SỬA] Bổ sung type Account cho chế độ cập nhật
+import type { Account, AccountForm } from '../../types/account';
 import type { Counter } from '../../types/counter';
 import type { Role } from '../../types/role';
 import styles from './AccountFormModal.module.css';
@@ -15,27 +19,66 @@ const COUNTER_OPERATE = 'COUNTER_OPERATE';
 interface AccountFormModalProps {
     open: boolean;
     roles: Role[];
+    // [THÊM MỚI] Truyền account khi sửa, null/undefined khi thêm mới
+    account?: Account | null;
     onClose: () => void;
     onSuccess: () => void; // gọi lại để tải lại danh sách
 }
 
-export default function AccountFormModal({ open, roles, onClose, onSuccess }: AccountFormModalProps) {
+export default function AccountFormModal({ open, roles, account, onClose, onSuccess }: AccountFormModalProps) {
     const [form] = Form.useForm<AccountForm>();
     const [counters, setCounters] = useState<Counter[]>([]);
     const [roleId, setRoleId] = useState<string>();
     const [submitting, setSubmitting] = useState(false);
 
+    // [THÊM MỚI] Xác định đang ở chế độ cập nhật hay thêm mới
+    const isEdit = Boolean(account);
+
     // Vai trò có quyền "Xử lý quầy" thì mới được (và bắt buộc phải) chọn quầy
     const needsCounter = roles.find((r) => r.roleId === roleId)?.permissions.includes(COUNTER_OPERATE) ?? false;
 
+    // useEffect(() => {
+    //     counterService
+    //         .getAll()
+    //         .then(setCounters)
+    //         .catch((error) => {
+    //             message.error(error instanceof Error ? error.message : 'Không tải được danh sách quầy');
+    //         });
+    // }, []);
+
+    // [THÊM MỚI] Đổ dữ liệu tài khoản vào form khi mở modal cập nhật
     useEffect(() => {
+        if (!open) return;
+
+        if (account) {
+            setRoleId(account.roleId);
+            form.setFieldsValue({
+                fullName: account.fullName,
+                phone: account.phone,
+                email: account.email,
+                username: account.username,
+                roleId: account.roleId,
+                status: account.status,
+                counterIds: [],
+            });
+        } else {
+            setRoleId(undefined);
+            form.resetFields();
+            form.setFieldsValue({ status: ACCOUNT_STATUS.ACTIVE, counterIds: [] });
+        }
+    }, [open, account, form]);
+
+    // [SỬA] Chỉ tải danh sách quầy khi mở modal và vai trò yêu cầu chọn quầy
+    useEffect(() => {
+        if (!open || !needsCounter) return;
+
         counterService
             .getAll()
             .then(setCounters)
-            .catch((error) => {
-                message.error(error instanceof Error ? error.message : 'Không tải được danh sách quầy');
+            .catch(() => {
+                setCounters([]);
             });
-    }, []);
+    }, [open, needsCounter]);
 
     const handleValuesChange = (changed: Partial<AccountForm>) => {
         if ('roleId' in changed) {
@@ -46,22 +89,42 @@ export default function AccountFormModal({ open, roles, onClose, onSuccess }: Ac
 
     const handleFinish = async (values: AccountForm) => {
         setSubmitting(true);
-        try {
-            await accountService.create({
-                fullName: values.fullName.trim(),
-                phone: values.phone.trim(),
-                email: values.email.trim(),
-                username: values.username.trim(),
-                password: values.password,
-                roleId: values.roleId,
-                counterIds: needsCounter ? values.counterIds ?? [] : [],
-                status: values.status,
-            });
-            message.success('Thêm tài khoản thành công');
+try {
+            // [SỬA] Gọi API cập nhật hoặc thêm mới thật từ apiBE/accounts
+            if (isEdit && account) {
+                await updateAccount(account.accountId, {
+                    fullName: values.fullName.trim(),
+                    phone: values.phone.trim(),
+                    email: values.email.trim(),
+                    username: values.username.trim(),
+                    roleId: values.roleId,
+                    status: values.status,
+                });
+                message.success('Cập nhật tài khoản thành công');
+            } else {
+                await createAccount({
+                    fullName: values.fullName.trim(),
+                    phone: values.phone.trim(),
+                    email: values.email.trim(),
+                    username: values.username.trim(),
+                    password: values.password,
+                    roleId: values.roleId,
+                    counterIds: needsCounter ? values.counterIds ?? [] : [],
+                    status: values.status,
+                });
+                message.success('Thêm tài khoản thành công');
+            }
             onSuccess();
             onClose();
-        } catch (error) {
-            message.error(error instanceof Error ? error.message : 'Thêm tài khoản thất bại');
+        } catch (error: any) {
+            message.error(
+                error?.response?.data?.message ||
+                    (error instanceof Error
+                        ? error.message
+                        : isEdit
+                          ? 'Cập nhật tài khoản thất bại'
+                          : 'Thêm tài khoản thất bại')
+            );
         } finally {
             setSubmitting(false);
         }
@@ -80,7 +143,9 @@ export default function AccountFormModal({ open, roles, onClose, onSuccess }: Ac
                 setRoleId(undefined);
             }}
             className={styles.modal}
-            title={<div className={styles.title}>Thêm tài khoản</div>}
+            // title={<div className={styles.title}>Thêm tài khoản</div>}
+            // [SỬA] Đổi tiêu đề theo chế độ thêm mới / cập nhật
+            title={<div className={styles.title}>{isEdit ? 'Cập nhật tài khoản' : 'Thêm tài khoản'}</div>}
         >
             <Form<AccountForm>
                 form={form}
@@ -112,9 +177,11 @@ export default function AccountFormModal({ open, roles, onClose, onSuccess }: Ac
                     rules={[
                         { required: true, message: 'Vui lòng nhập số điện thoại' },
                         { pattern: /^\d+$/, message: 'Số điện thoại chỉ gồm chữ số' },
+                        { max: 10, message: 'Số điện thoại tối đa 10 ký tự' },
                     ]}
                 >
-                    <Input placeholder="Nhập số điện thoại" />
+                    {/* <Input placeholder="Nhập số điện thoại" /> */}
+                    <Input placeholder="Nhập số điện thoại" maxLength={10} />
                 </Form.Item>
 
                 <Form.Item
@@ -137,6 +204,11 @@ export default function AccountFormModal({ open, roles, onClose, onSuccess }: Ac
                     <Input placeholder="Nhập tên đăng nhập" />
                 </Form.Item>
 
+                {/* [SỬA] Chỉ hiển thị ô nhập mật khẩu khi thêm mới (đổi mật khẩu dùng nút chìa khóa riêng) */}
+
+                {!isEdit && (
+                   <>
+
                 {/* required={false}: tự vẽ dấu * để chèn thêm chữ "Tối thiểu 8 ký tự" như Figma */}
                 <Form.Item
                     label={
@@ -154,6 +226,8 @@ export default function AccountFormModal({ open, roles, onClose, onSuccess }: Ac
                 >
                     <Input.Password placeholder="Nhập mật khẩu:" />
                 </Form.Item>
+                </>
+                )}
 
                 <Form.Item
                     label="Nhập lại mật khẩu"

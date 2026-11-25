@@ -7,8 +7,11 @@ import { Button, Input, Modal, Select, Spin, Table, message } from 'antd';
 import type { TableColumnsType } from 'antd';
 import { DeleteOutlined, EditOutlined, SearchOutlined } from '@ant-design/icons';
 // import { roleService } from '../../../api/services/roleService';
-import { getPermissionGroups, getRoleById } from '../../../api/apiBE/role';
-import { accountService } from '../../../api/services/accountService';
+// import { getPermissionGroups, getRoleById } from '../../../api/apiBE/role';
+// import { accountService } from '../../../api/services/accountService';
+import { getPermissionGroups, getRoleById, getRoles } from '../../../api/apiBE/role';
+import { deleteAccounts, getAccounts } from '../../../api/apiBE/accounts';
+import AccountFormModal from '../../../components/accounts/AccountFormModal';
 import PaginationBar from '../../../components/common/PaginationBar';
 import PermissionSummary from '../../../components/roles/PermissionSummary';
 import { ACCOUNT_STATUS, ACCOUNT_STATUS_LABEL } from '../../../constants/enums';
@@ -33,6 +36,7 @@ export default function RoleDetailPage() {
 
   const [role, setRole] = useState<Role | null>(null);
   const [groups, setGroups] = useState<PermissionGroup[]>([]);
+  const [roles, setRoles] = useState<Role[]>([]);
 
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [total, setTotal] = useState(0);
@@ -45,17 +49,23 @@ export default function RoleDetailPage() {
   const [selectedKeys, setSelectedKeys] = useState<Key[]>([]);
   // [THÊM MỚI] State kích hoạt tải lại danh sách tài khoản
   const [refreshKey, setRefreshKey] = useState(0);
+  const [editingAccount, setEditingAccount] = useState<Account | null>(null);
 
 // [SỬA] Tải thông tin vai trò + danh sách nhóm quyền từ API BE
   useEffect(() => {
     if (!roleId) return;
     let active = true;
 
-    Promise.all([getRoleById(roleId), getPermissionGroups()])
-      .then(([r, g]) => {
+    Promise.all([
+      getRoleById(roleId), 
+      getPermissionGroups(),
+      getRoles({ page: 1, pageSize: 100 }),
+    ])
+      .then(([r, g, roleList]) => {
         if (!active) return;
         setRole(r);
         setGroups(g);
+        setRoles(roleList.items);
       })
       .catch((error: any) => {
         if (!active) return;
@@ -140,7 +150,8 @@ export default function RoleDetailPage() {
     const fetchAccounts = async () => {
       setLoading(true);
       try {
-        const res = await accountService.getListByRole({
+        // const res = await accountService.getListByRole({
+        const res = await getAccounts({
           roleId,
           page,
           pageSize,
@@ -151,10 +162,11 @@ export default function RoleDetailPage() {
           setAccounts(res.items);
           setTotal(res.total);
         }
-      } catch (error) {
+      } catch (error: any) {
         if (active) {
           message.error(
-            error instanceof Error ? error.message : 'Không thể tải danh sách tài khoản'
+            error?.response?.data?.message ||
+            (error instanceof Error ? error.message : 'Không thể tải danh sách tài khoản')
           );
         }
       } finally {
@@ -179,7 +191,8 @@ export default function RoleDetailPage() {
 
   const handleEditAccount = (account: Account) => {
     // TODO: mở màn sửa tài khoản
-    message.info(`Sửa tài khoản: ${account.username}`);
+    // message.info(`Sửa tài khoản: ${account.username}`);
+    setEditingAccount(account);
   };
 
   const handleDelete = () => {
@@ -191,13 +204,17 @@ export default function RoleDetailPage() {
       okButtonProps: { danger: true },
       onOk: async () => {
         try {
-          await accountService.remove(selectedKeys as string[]);
+          // await accountService.remove(selectedKeys as string[]);
+          await deleteAccounts(selectedKeys as string[]);
           message.success('Đã xóa tài khoản');
           setSelectedKeys([]);
           // [SỬA] Kích hoạt reload danh sách
           setRefreshKey((current) => current + 1);
-        } catch (error) {
-          message.error(error instanceof Error ? error.message : 'Xóa thất bại');
+        } catch (error: any) {
+          message.error(
+            error?.response?.data?.message ||
+           (error instanceof Error ? error.message : 'Xóa thất bại')
+         );
         }
       },
     });
@@ -329,6 +346,15 @@ export default function RoleDetailPage() {
           className={styles.deleteButton}
         />
       </div>
+
+      <AccountFormModal
+        open={editingAccount !== null}
+        roles={roles}
+        account={editingAccount}
+        onClose={() => setEditingAccount(null)}
+        onSuccess={() => setRefreshKey((current) => current + 1)}
+      />
+
     </div>
   );
 }

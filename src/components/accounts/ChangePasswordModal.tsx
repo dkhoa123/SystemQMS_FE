@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { Button, Form, Input, Modal, message } from 'antd';
-import { accountService } from '../../api/services/accountService';
+// import { accountService } from '../../api/services/accountService';
+// [THÊM MỚI]
+import { changeAccountPassword } from '../../api/apiBE/accounts';
 import { VALIDATION } from '../../constants/validation';
 import type { Account, ChangePasswordForm } from '../../types/account';
 import styles from './ChangePasswordModal.module.css';
@@ -19,11 +21,19 @@ export default function ChangePasswordModal({ open, account, onClose }: ChangePa
         if (!account) return;
         setSubmitting(true);
         try {
-            await accountService.changePassword(account.accountId, values.password);
+            // await accountService.changePassword(account.accountId, values.password);
+            // [SỬA] Gọi API đổi mật khẩu thật từ apiBE/accounts
+            await changeAccountPassword(account.accountId, {
+                newPassword: values.password,
+                confirmPassword: values.confirmPassword,
+            });
             message.success('Đổi mật khẩu thành công');
             onClose();
-        } catch (error) {
-            message.error(error instanceof Error ? error.message : 'Đổi mật khẩu thất bại');
+        } catch (error: any) {
+            message.error(
+                error?.response?.data?.message ||
+                    (error instanceof Error ? error.message : 'Đổi mật khẩu thất bại')
+            );
         } finally {
             setSubmitting(false);
         }
